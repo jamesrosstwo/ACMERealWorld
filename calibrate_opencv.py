@@ -208,9 +208,6 @@ class CameraCalibrator:
             cam_id = int(cam_dir.stem[3:])
             cam_data[cam_id] = self._cam_data(cam_dir, cam_id)
             single_calibrations[cam_id] = self._calib_single(cam_data[cam_id])
-
-
-
         return
 
     def save_result(self, result: dict):

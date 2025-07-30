@@ -16,22 +16,9 @@ def convert_to_kalibr_format(source_root: Path, camera_count: int):
 
         shutil.copyfile("target.yaml", cam_dest / "target.yaml")
 
-        for img_file in sorted(cam_src.glob("color_*.png")):
-            name = img_file.stem  # e.g., color_HHMMSS_micro
-            time_part = name.split("_", 1)[1]
-            try:
-                dt = datetime.strptime(time_part, "%H%M%S_%f")
-            except ValueError as e:
-                print(f"Skipping {img_file}: {e}")
-                continue
+        for img_file in sorted(cam_src.glob("*.png")):
+            dest_img_path = cam_dest / img_file.name
 
-            now_date = datetime.now().date()
-            full_dt = datetime.combine(now_date, dt.time())
-            timestamp_ns = int(full_dt.timestamp() * 1e9)
-
-            dest_img_path = cam_dest / f"{timestamp_ns}.png"
-
-            # ✅ Read and convert to grayscale using OpenCV
             img = cv2.imread(str(img_file), cv2.IMREAD_GRAYSCALE)
             if img is None:
                 print(f"Failed to read image: {img_file}")
@@ -39,7 +26,6 @@ def convert_to_kalibr_format(source_root: Path, camera_count: int):
 
             cv2.imwrite(str(dest_img_path), img)
 
-    print(f"✅ Kalibr-compatible grayscale dataset written to: {dest_root}")
 
 
 if __name__ == "__main__":
