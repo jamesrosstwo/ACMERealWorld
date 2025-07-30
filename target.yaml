@@ -1,5 +1,5 @@
-target_type: 'aprilgrid' #gridtype
-tagCols: 4               #number of apriltags
-tagRows: 3               #number of apriltags
-tagSize: 0.05           #size of apriltag, edge to edge [m]
-tagSpacing: 0.12          #ratio of space between tags to tagSize
+target_type: 'checkerboard' #gridtype
+targetCols: 8               #number of apriltags
+targetRows: 4               #number of apriltags
+rowSpacingMeters: 0.04      #size of one chessboard square [m]
+colSpacingMeters: 0.04      #size of one chessboard square [m]

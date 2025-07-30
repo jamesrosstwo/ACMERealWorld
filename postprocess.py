@@ -1,7 +1,7 @@
 import shutil
 from pathlib import Path
 from datetime import datetime
-import cv2  # Import OpenCV
+import cv2
 
 
 def convert_to_kalibr_format(source_root: Path, camera_count: int):
@@ -17,7 +17,16 @@ def convert_to_kalibr_format(source_root: Path, camera_count: int):
         shutil.copyfile("target.yaml", cam_dest / "target.yaml")
 
         for img_file in sorted(cam_src.glob("*.png")):
-            dest_img_path = cam_dest / img_file.name
+            stem = img_file.stem  # e.g., '1234567890'
+            try:
+                timestamp_ms = int(stem)
+                timestamp_us = timestamp_ms * 1000000  # Convert ms to µs
+                new_filename = f"{timestamp_us}.png"
+            except ValueError:
+                print(f"Skipping file with non-numeric name: {img_file.name}")
+                continue
+
+            dest_img_path = cam_dest / new_filename
 
             img = cv2.imread(str(img_file), cv2.IMREAD_GRAYSCALE)
             if img is None:
@@ -25,7 +34,6 @@ def convert_to_kalibr_format(source_root: Path, camera_count: int):
                 continue
 
             cv2.imwrite(str(dest_img_path), img)
-
 
 
 if __name__ == "__main__":
