@@ -13,7 +13,7 @@ import numpy as np
 import cv2
 from tqdm import tqdm
 
-WIDTH, HEIGHT, FPS = 1920, 1080, 6
+WIDTH, HEIGHT, FPS = 1920, 1080, 30
 ENABLE_DEPTH = False
 ENABLE_COLOR = True
 
