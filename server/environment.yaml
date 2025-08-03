@@ -1,0 +1,13 @@
+name: nuc_polymetis_server
+channels:
+  - defaults
+  - pytorch
+  - fair-robotics
+  - aihabitat
+  - conda-forge
+dependencies:
+  - python=3.8
+  - polymetis
+  - pip
+  - pip:
+      - some-package
