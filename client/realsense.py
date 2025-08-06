@@ -1,98 +1,86 @@
-#!/usr/bin/env python3
-"""
-multi_realsense_sync.py
-Grab synchronized frames from *all* attached RealSense cameras.
-"""
-
-import time
-from datetime import datetime
-from pathlib import Path
-
-import pyrealsense2 as rs
+import threading
+import queue
 import numpy as np
-
-WIDTH, HEIGHT, FPS = 1280, 720, 15
-ENABLE_DEPTH = True
-ENABLE_COLOR = True
-
-base_out_dir = Path("outputs").resolve().absolute()
-out_dir = base_out_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
-out_dir.mkdir(parents=True)
-
-def enumerate_devices():
-    """Return list of (serial, product_line) for every connected camera."""
-    ctx = rs.context()
-    devs = []
-    for d in ctx.query_devices():
-        serial = d.get_info(rs.camera_info.serial_number)
-        product = d.get_info(rs.camera_info.product_line)
-        devs.append((serial, product))
-    return devs
-
-def start_pipeline(serial: str):
-    """Create and start a pipeline for one camera with given serial."""
-    cfg = rs.config()
-    cfg.enable_device(serial)
-
-    if ENABLE_DEPTH:
-        cfg.enable_stream(rs.stream.depth, WIDTH, HEIGHT, rs.format.z16, FPS)
-    if ENABLE_COLOR:
-        cfg.enable_stream(rs.stream.color, WIDTH, HEIGHT, rs.format.bgr8, FPS)
-
-    pipe = rs.pipeline()
-    align = rs.align(rs.stream.color)  # align depth to color
-    profile = pipe.start(cfg)
-    return pipe, align
+from tqdm import tqdm
+from client.record import start_pipeline, enumerate_devices, get_tmstmp
 
 
-def get_single_frames(pipelines, aligners):
-    framesets = []
-    for pipe, align in zip(pipelines, aligners):
-        fs = pipe.wait_for_frames(timeout_ms=5000)
-        fs = align.process(fs)
-        framesets.append(fs)
+class RealSenseInterface:
+    class _FrameGrabberThread(threading.Thread):
+        def __init__(self, idx, pipe, align, out_queue, stop_event):
+            super().__init__()
+            self.idx = idx
+            self.pipe = pipe
+            self.align = align
+            self.out_queue = out_queue
+            self.stop_event = stop_event
 
+        def run(self):
+            while not self.stop_event.is_set():
+                try:
+                    fs = self.pipe.wait_for_frames(timeout_ms=5000)
+                    fs = self.align.process(fs) if self.align else fs
+                    depth_frame = fs.get_depth_frame()
+                    color_frame = fs.get_color_frame()
 
-    depths = []
-    colors = []
-    for cam_idx, fs in enumerate(framesets):
-        depth = np.asanyarray(fs.get_depth_frame().get_data())
-        color = np.asanyarray(fs.get_color_frame().get_data())
-        depths.append(depth)
-        colors.append(color)
+                    depth = np.asanyarray(depth_frame.get_data())
+                    color = np.asanyarray(color_frame.get_data())
 
-    return colors, depths
+                    depth_ts = get_tmstmp(depth_frame)
+                    color_ts = get_tmstmp(color_frame)
 
-def main():
-    cameras = enumerate_devices()
-    if not cameras:
-        print("No RealSense devices detected – exiting.")
-        return
+                    self.out_queue.put(((color, color_ts), (depth, depth_ts)))
+                except Exception as e:
+                    print(f"Camera {self.idx} failed to grab frame: {e}")
+                    self.out_queue.put(((None, None), (None, None)))
 
-    print(f"Found {len(cameras)} camera(s):")
-    for serial, product in cameras:
-        print(f"   {serial}  ({product})")
+    def __init__(self, width, height, fps):
+        self._width = width
+        self._height = height
+        self._fps = fps
+        self._pipelines, self._aligners = self._initialize_cameras()
+        self._frame_queues = [queue.Queue() for _ in self._pipelines]
+        self._stop_event = threading.Event()
+        self._threads = []
 
-    # Create a pipeline + align object for every camera
-    pipelines   = []
-    aligners    = []
-    for serial, _ in cameras:
-        pipe, align = start_pipeline(serial)
-        pipelines.append(pipe)
-        aligners.append(align)
+        for idx, (pipe, align) in enumerate(zip(self._pipelines, self._aligners)):
+            t = self._FrameGrabberThread(idx, pipe, align, self._frame_queues[idx], self._stop_event)
+            t.start()
+            self._threads.append(t)
 
-    # Warm-up auto-exposure etc.
-    time.sleep(1.0)
+    def _initialize_cameras(self):
+        cameras = enumerate_devices()
+        if not cameras:
+            print("No RealSense devices detected – exiting.")
+            return [], []
 
-    try:
+        print(f"Found {len(cameras)} camera(s):")
+        for idx, (serial, product) in enumerate(cameras):
+            print(f"   Camera {idx}: {serial}  ({product})")
 
-        dirs = [out_dir / f"cam_{i}" for i in range(len(pipelines))]
-        for dir, color, depth in zip(dirs, get_single_frames(pipelines, aligners)):
+        pipelines = []
+        aligners = []
+        for serial, _ in cameras:
+            pipe, align, _ = start_pipeline(serial, self._width, self._height, self._fps)
+            pipelines.append(pipe)
+            aligners.append(align)
+        return pipelines, aligners
 
+    def get_synchronized_frames(self, n):
+        for _ in tqdm(range(n)):
+            frame_data = [q.get() for q in self._frame_queues]
+            colors = [fd[0] for fd in frame_data]
+            depths = [fd[1] for fd in frame_data]
+            yield colors, depths
 
-    finally:
-        for p in pipelines:
-            p.stop()
+    def get_synchronized_frame(self):
+        frame_data = [q.get() for q in self._frame_queues]
+        colors = [fd[0] for fd in frame_data]
+        depths = [fd[1] for fd in frame_data]
+        return colors, depths
 
-if __name__ == "__main__":
-    main()
+    def shutdown(self):
+        self._stop_event.set()
+        for t in self._threads:
+            t.join()
+        print("All camera threads stopped.")

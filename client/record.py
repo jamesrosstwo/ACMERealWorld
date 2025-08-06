@@ -49,13 +49,13 @@ def enumerate_devices():
         devs.append((serial, product))
     return devs
 
-def start_pipeline(serial: str):
+def start_pipeline(serial: str, w: int, h: int, fps: int):
     cfg = rs.config()
     cfg.enable_device(serial)
     if ENABLE_DEPTH:
-        cfg.enable_stream(rs.stream.depth, WIDTH, HEIGHT, rs.format.z16, FPS)
+        cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
     if ENABLE_COLOR:
-        cfg.enable_stream(rs.stream.color, WIDTH, HEIGHT, rs.format.bgr8, FPS)
+        cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
     pipe = rs.pipeline()
     align = rs.align(rs.stream.color) if ENABLE_DEPTH else None
     start_time = time.time()  # Record global time at pipeline start
@@ -64,10 +64,10 @@ def start_pipeline(serial: str):
 
 import threading
 
-def _get_tmstmp(frame):
+def get_tmstmp(frame):
     return frame.get_frame_metadata(rs.frame_metadata_value.time_of_arrival)
 
-def get_synchronized_frames(pipelines, aligners, system_start_times, n=1000):
+def get_synchronized_frames(pipelines, aligners, n=1000):
     for _ in tqdm(range(n)):
         frame_data = [None] * len(pipelines)
 
@@ -82,8 +82,8 @@ def get_synchronized_frames(pipelines, aligners, system_start_times, n=1000):
                 depth = np.asanyarray(depth_frame.get_data()) if ENABLE_DEPTH else None
                 color = np.asanyarray(color_frame.get_data()) if color_frame else None
 
-                depth_ts = _get_tmstmp(depth_frame) if ENABLE_DEPTH else None
-                color_ts = _get_tmstmp(color_frame)
+                depth_ts = get_tmstmp(depth_frame) if ENABLE_DEPTH else None
+                color_ts = get_tmstmp(color_frame)
 
                 frame_data[idx] = ((color, color_ts), (depth, depth_ts))
             except Exception as e:
@@ -125,7 +125,7 @@ def main():
     time.sleep(4.0)
 
     try:
-        for idx, (colors, depths) in enumerate(get_synchronized_frames(pipelines, aligners, system_start_times)):
+        for idx, (colors, depths) in enumerate(get_synchronized_frames(pipelines, aligners)):
             for cam_dir, (color, color_time), (depth, depth_time) in zip(dirs, colors, depths):
                 if color is not None and color_time is not None:
                     color_path = cam_dir / f"{color_time}.png"

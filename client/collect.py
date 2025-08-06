@@ -1,15 +1,25 @@
-from polymetis import RobotInterface
-from polymetis import GripperInterface
+import hydra
+from omegaconf import DictConfig
+from client.nuc import NUCInterface
+from client.realsense import RealSenseInterface
+from client.teleop import MetaQuestInterface
+from client.write import DataWriter
 
-robot = RobotInterface(
-    ip_address="192.168.1.106",
-)
 
+@hydra.main(config_path="config", config_name="collect")
+def main(cfg: DictConfig):
+    out_path = cfg.out_path
+    nuc = NUCInterface(**cfg.nuc)
+    realsense = RealSenseInterface(**cfg.realsense)
+    quest = MetaQuestInterface(**cfg.quest)
+    writer = DataWriter(**cfg.writer)
 
-gripper = GripperInterface(
-    ip_address="localhost",
-)
-
-gripper_state = gripper.get_state()
-
-print(gripper_state)
+    for i in range(500):
+        colors, depths = realsense.get_synchronized_frame()
+        writer.write_frame(colors, depths)
+        state = nuc.get_robot_state()
+        eef_pos, gripper_force = quest.get_control()
+        action = ...
+        state.update(dict(action=action))
+        writer.write_state(**state)
+        nuc.send_control(eef_pos, gripper_force)
