@@ -22,4 +22,13 @@ dependencies:
       - IPython
       - pyrealsense2
       - opencv-contrib-python
-      - pyopenxr
+      - pyquaternion
+      - Pillow
+      - termcolor 
+      - numpy-quaternion
+      - tyro
+      - pure-python-adb
+      - dm_control
+      - xarm
+      - xarm-python-sdk
+      - zmq

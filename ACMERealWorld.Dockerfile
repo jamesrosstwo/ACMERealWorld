@@ -48,16 +48,9 @@ RUN arch=$(uname -m) && \
     rm -f miniconda.sh
 
 RUN git clone git@github.com:jamesrosstwo/ACMERealWorld.git
-RUN git clone --recursive git@github.com:UT-Austin-RPL/deoxys_control.git
-RUN git clone --recursive git@github.com:jmcoholich/openteach.git
-
 
 WORKDIR /ACMERealWorld
 RUN conda env create -f environment.yaml
-
-
-RUN echo '#!/bin/bash\nsource /Squeeze3D/venv/bin/activate\nexec "$@"' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
