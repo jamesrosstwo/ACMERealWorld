@@ -1,0 +1,3 @@
+[submodule "submodules/gello_software"]
+	path = submodules/gello_software
+	url = git@github.com:rvl-lab-utoronto/gello_software.git
