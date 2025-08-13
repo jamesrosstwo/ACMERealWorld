@@ -65,6 +65,7 @@ def main(cfg: DictConfig):
         writer.write_frame(i, colors, depths)
         writer.write_state(timestep=i, action=get_action(), **state)
     stop_control()
+    realsense.shutdown()
     writer.flush()
     exit(0)
 
