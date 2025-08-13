@@ -30,7 +30,7 @@ class NUCInterface:
 
     def reset(self):
         self._robot.go_home()
-        self._gripper.goto(width=0.01, speed=0.05)
+        self._gripper.goto(width=0, speed=0.05, force=0.1)
 
     def start(self):
         self._robot.start_joint_impedance(self._robot.Kq_default / 10, self._robot.Kqd_default / 10)
