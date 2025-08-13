@@ -6,7 +6,7 @@ nuc:
 realsense:
   width: 1280
   height: 720
-  fps: 6
+  fps: 15
 
 writer:
   episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/episodes"
