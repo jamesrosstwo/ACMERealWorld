@@ -1,139 +1,61 @@
-from omegaconf import DictConfig
-import xr
+from dataclasses import dataclass
+from typing import Tuple, List
 
-"""
-pyopenxr example program track_controller.py
+import numpy as np
 
-Prints the position of your right-hand controller for 30 frames.
-"""
+from gello.dynamixel.driver import DynamixelDriver
 
-import ctypes
-import time
+@dataclass
+class _GelloArgs:
+    port: str
+    """The port that GELLO is connected to."""
 
-# ContextObject is a high level pythonic class meant to keep simple cases simple.
-with xr.ContextObject(
-    instance_create_info=xr.InstanceCreateInfo(
-        enabled_extension_names=[
-            # A graphics extension is mandatory (without a headless extension)
-            xr.KHR_OPENGL_ENABLE_EXTENSION_NAME,
-        ],
-    ),
-) as context:
-    # Set up the controller pose action
-    controller_paths = (xr.Path * 2)(
-        xr.string_to_path(context.instance, "/user/hand/left"),
-        xr.string_to_path(context.instance, "/user/hand/right"),
-    )
-    controller_pose_action = xr.create_action(
-        action_set=context.default_action_set,
-        create_info=xr.ActionCreateInfo(
-            action_type=xr.ActionType.POSE_INPUT,
-            action_name="hand_pose",
-            localized_action_name="Hand Pose",
-            count_subaction_paths=len(controller_paths),
-            subaction_paths=controller_paths,
-        ),
-    )
-    suggested_bindings = (xr.ActionSuggestedBinding * 2)(
-        xr.ActionSuggestedBinding(
-            action=controller_pose_action,
-            binding=xr.string_to_path(
-                instance=context.instance,
-                path_string="/user/hand/left/input/grip/pose",
-            ),
-        ),
-        xr.ActionSuggestedBinding(
-            action=controller_pose_action,
-            binding=xr.string_to_path(
-                instance=context.instance,
-                path_string="/user/hand/right/input/grip/pose",
-            ),
-        ),
-    )
-    xr.suggest_interaction_profile_bindings(
-        instance=context.instance,
-        suggested_bindings=xr.InteractionProfileSuggestedBinding(
-            interaction_profile=xr.string_to_path(
-                context.instance,
-                "/interaction_profiles/khr/simple_controller",
-            ),
-            count_suggested_bindings=len(suggested_bindings),
-            suggested_bindings=suggested_bindings,
-        ),
-    )
-    xr.suggest_interaction_profile_bindings(
-        instance=context.instance,
-        suggested_bindings=xr.InteractionProfileSuggestedBinding(
-            interaction_profile=xr.string_to_path(
-                context.instance,
-                "/interaction_profiles/htc/vive_controller",
-            ),
-            count_suggested_bindings=len(suggested_bindings),
-            suggested_bindings=suggested_bindings,
-        ),
-    )
+    start_joints: Tuple[float, ...]
+    """The joint angles that the GELLO is placed in at (in radians)."""
 
-    action_spaces = [
-        xr.create_action_space(
-            session=context.session,
-            create_info=xr.ActionSpaceCreateInfo(
-                action=controller_pose_action,
-                subaction_path=controller_paths[0],
-            ),
-        ),
-        xr.create_action_space(
-            session=context.session,
-            create_info=xr.ActionSpaceCreateInfo(
-                action=controller_pose_action,
-                subaction_path=controller_paths[1],
-            ),
-        ),
-    ]
-    # Loop over the render frames
-    session_was_focused = False  # Check for a common problem
-    for frame_index, frame_state in enumerate(context.frame_loop()):
+    joint_signs: Tuple[float, ...]
+    """The joint angles that the GELLO is placed in at (in radians)."""
 
-        if context.session_state == xr.SessionState.FOCUSED:
-            # TODO: race condition possible if session state changes during
-            # execution of this block. Maybe catch not focused error.
-            session_was_focused = True
-            active_action_set = xr.ActiveActionSet(
-                action_set=context.default_action_set,
-                subaction_path=xr.NULL_PATH,
-            )
-            xr.sync_actions(
-                session=context.session,
-                sync_info=xr.ActionsSyncInfo(
-                    count_active_action_sets=1,
-                    active_action_sets=ctypes.pointer(active_action_set),
-                ),
-            )
-            found_count = 0
-            for index, space in enumerate(action_spaces):
-                space_location = xr.locate_space(
-                    space=space,
-                    base_space=context.space,
-                    time=frame_state.predicted_display_time,
-                )
-                if space_location.location_flags & xr.SPACE_LOCATION_POSITION_VALID_BIT:
-                    print(index + 1, space_location.pose)
-                    found_count += 1
-            if found_count == 0:
-                print("no controllers active")
+    base_index: int = 1
+    baud_rate: int = 57600
 
-        # Slow things down, especially since we are not rendering anything
-        time.sleep(0.5)
-        # Don't run forever
-        if frame_index > 30:
-            break
-    if not session_was_focused:
-        print("This OpenXR session never entered the FOCUSED state. Did you wear the headset?")
+    gripper: bool = True
+    """Whether or not the gripper is attached."""
 
-class MetaQuestInterface:
-    def __init__(self, quest: DictConfig):
-        pass
+    def __post_init__(self):
+        assert len(self.joint_signs) == len(self.start_joints)
+        for idx, j in enumerate(self.joint_signs):
+            assert (
+                j == -1 or j == 1
+            ), f"Joint idx: {idx} should be -1 or 1, but got {j}."
 
-    def get_control(self):
-        desired_eef_pos = ...
-        desired_gripper_force = ...
-        return desired_eef_pos, desired_gripper_force
+    @property
+    def num_robot_joints(self) -> int:
+        return len(self.start_joints)
+
+    @property
+    def num_joints(self) -> int:
+        extra_joints = 1 if self.gripper else 0
+        return self.num_robot_joints + extra_joints
+
+    @property
+    def joint_ids(self) -> List[int]:
+        return list(range(self.base_index, self.num_joints + self.base_index))
+
+class GELLOInterface:
+    def __init__(self, joint_signs: List[int], *args, **kwargs):
+        self._args = _GelloArgs(joint_signs=joint_signs, *args, **kwargs)
+        self._driver = DynamixelDriver(self._args.joint_ids, port=self._args.port, baudrate=self._args.baud_rate)
+        self._joint_signs = np.array(joint_signs)
+        self._joint_adjustment = np.zeros(7)
+        self._eef_pos_adjustment = np.zeros(3)
+
+    def _get_joints(self):
+        return (self._joint_signs * self._driver.get_joints()[:7])
+
+    def get_joint_angles(self):
+        return self._get_joints() + self._joint_adjustment
+
+
+    def zero_controls(self, qpos):
+        self._joint_adjustment = qpos - self._get_joints()

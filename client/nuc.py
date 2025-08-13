@@ -1,5 +1,5 @@
+import torch
 from polymetis import RobotInterface, GripperInterface
-from polymetis_pb2 import GripperState
 
 
 class NUCInterface:
@@ -9,17 +9,27 @@ class NUCInterface:
             ip_address=self._nuc_ip,
         )
         self._gripper = GripperInterface(
-            ip_address=self._nuc_ip,
+            ip_address="localhost",
         )
 
+
     def get_robot_state(self):
-        gripper_state: GripperState = self._gripper.get_state()
+        # gripper_state = self._gripper.get_state()
         qpos = self._robot.get_joint_positions()
         qvel = self._robot.get_joint_velocities()
         ee_pos, ee_rot = self._robot.get_ee_pose()
-        gripper_force = gripper_state.force  # idk
-        return dict(qpos=qpos, qvel=qvel, ee_pos=ee_pos, ee_rot=ee_rot, gripper_force=gripper_force)
+        # gripper_force = gripper_state.force  # idk
+        state = dict(qpos=qpos, qvel=qvel, ee_pos=ee_pos, ee_rot=ee_rot, gripper_force=torch.zeros(1))
+        return {k: v.detach().cpu().numpy() for k, v in state.items()}
 
-    def send_control(self, desired_eef_pos, desired_gripper_force):
-        self._robot.move_to_ee_pose(desired_eef_pos)
-        self._gripper.grasp(speed=0.05, force=desired_gripper_force)
+    def forward_kinematics(self, joint_positions):
+        return self._robot.robot_model.forward_kinematics(joint_positions)
+
+    def send_control(self, joint_angles, gripper_pos):
+        self._robot.update_desired_joint_positions(torch.tensor(joint_angles))
+
+    def reset(self):
+        self._robot.go_home()
+
+    def start(self):
+        self._robot.start_joint_impedance(self._robot.Kq_default / 10, self._robot.Kqd_default / 10)

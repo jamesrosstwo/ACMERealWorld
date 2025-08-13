@@ -75,9 +75,11 @@ class RealSenseInterface:
 
     def get_synchronized_frame(self):
         frame_data = [q.get() for q in self._frame_queues]
-        colors = [fd[0] for fd in frame_data]
-        depths = [fd[1] for fd in frame_data]
-        return colors, depths
+        cols = [fd[0] for fd in frame_data]
+        ds = [fd[1] for fd in frame_data]
+        colors, color_timesteps = zip(*cols)
+        depths, depth_timesteps = zip(*ds)
+        return colors, color_timesteps, depths, depth_timesteps
 
     def shutdown(self):
         self._stop_event.set()

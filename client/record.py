@@ -24,21 +24,12 @@ rosrun kalibr kalibr_calibrate_cameras \
 
 """
 import time
-from datetime import datetime
-from pathlib import Path
-
 import pyrealsense2 as rs
 import numpy as np
 import cv2
 from tqdm import tqdm
+import threading
 
-WIDTH, HEIGHT, FPS = 1920, 1080, 30
-ENABLE_DEPTH = False
-ENABLE_COLOR = True
-
-base_out_dir = Path("outputs").resolve().absolute()
-out_dir = base_out_dir / datetime.now().strftime("%Y%m%d_%H%M%S")
-out_dir.mkdir(parents=True)
 
 def enumerate_devices():
     ctx = rs.context()
@@ -52,17 +43,14 @@ def enumerate_devices():
 def start_pipeline(serial: str, w: int, h: int, fps: int):
     cfg = rs.config()
     cfg.enable_device(serial)
-    if ENABLE_DEPTH:
-        cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
-    if ENABLE_COLOR:
-        cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
+    cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
+    cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
     pipe = rs.pipeline()
-    align = rs.align(rs.stream.color) if ENABLE_DEPTH else None
+    align = rs.align(rs.stream.color)
     start_time = time.time()  # Record global time at pipeline start
     pipe.start(cfg)
     return pipe, align, start_time
 
-import threading
 
 def get_tmstmp(frame):
     return frame.get_frame_metadata(rs.frame_metadata_value.time_of_arrival)
@@ -76,13 +64,13 @@ def get_synchronized_frames(pipelines, aligners, n=1000):
             try:
                 fs = pipe.wait_for_frames(timeout_ms=5000)
                 fs = align.process(fs) if align else fs
-                depth_frame = fs.get_depth_frame() if ENABLE_DEPTH else None
+                depth_frame = fs.get_depth_frame()
                 color_frame = fs.get_color_frame()
 
-                depth = np.asanyarray(depth_frame.get_data()) if ENABLE_DEPTH else None
-                color = np.asanyarray(color_frame.get_data()) if color_frame else None
+                depth = np.asanyarray(depth_frame.get_data())
+                color = np.asanyarray(color_frame.get_data())
 
-                depth_ts = get_tmstmp(depth_frame) if ENABLE_DEPTH else None
+                depth_ts = get_tmstmp(depth_frame)
                 color_ts = get_tmstmp(color_frame)
 
                 frame_data[idx] = ((color, color_ts), (depth, depth_ts))

@@ -1,116 +1,44 @@
-defaults:
-  - override hydra/hydra_logging: disabled
-  - override hydra/job_logging: disabled
+max_episode_timesteps: 150
 
 nuc:
-  ip: "192.168.1.111"
+  ip: "192.168.1.106"
+
+realsense:
+  width: 1280
+  height: 720
+  fps: 6
 
 writer:
+  episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/episodes"
+  max_episode_len: ${max_episode_timesteps}
+  n_cameras: 4
   captures:
-    frame_width: 1920
-    frame_height: 1080
-    block_size: 16
 
-teleop:
-  robot:
-    robot_name: franka_arm
-    detector:
-      _target_: openteach.components.detector.oculus.OculusVRHandDetector
-      host: ${teleop.host_address}
-      oculus_port: ${teleop.oculus_reciever_port}
-      keypoint_pub_port: ${teleop.keypoint_port}
-      button_port: ${teleop.resolution_button_port}
-      button_publish_port: ${teleop.resolution_button_publish_port}
-      teleop_reset_port: ${teleop.teleop_reset_port}
-      teleop_reset_publish_port: ${teleop.teleop_reset_publish_port}
+    frame_width: ${realsense.width}
+    frame_height: ${realsense.height}
+    max_episode_len: ${writer.max_episode_len}
+    fps: ${realsense.fps}
 
-    # Transformation classes used to transform the keypoints
-    transforms:
-      - _target_: openteach.components.detector.keypoint_transform.TransformHandPositionCoords
-        host: ${teleop.host_address}
-        keypoint_port: ${teleop.keypoint_port}
-        transformation_port: ${teleop.transformed_position_keypoint_port}
-        moving_average_limit: 1
-
-    # Visualizers used to visualize the keypoints stream
-    visualizers:
-      - _target_: openteach.components.visualizers.visualizer_2d.Hand2DVisualizer
-        host: ${teleop.host_address}
-        transformed_keypoint_port: ${teleop.transformed_position_keypoint_port}
-        oculus_feedback_port: ${teleop.oculus_graph_port}
-        display_plot: ${teleop.visualize_right_2d}
-
-    # Operators used to retarget the keypoints
-    operators:
-      - _target_: openteach.components.operators.franka.FrankaArmOperator
-        host: ${teleop.host_address}
-        transformed_keypoints_port: ${teleop.transformed_position_keypoint_port}
-        arm_resolution_port: ${teleop.resolution_button_publish_port}
-        use_filter: False
-        teleoperation_reset_port: ${teleop.teleop_reset_publish_port}
-
-    # List of controller classes used
-    controllers:
-      - _target_: openteach.robot.franka.FrankaArm
-        record: True
-
-    # Information to be recorded by the robot
-    recorded_data:
-      - - joint_states
-        - cartesian_states
-  host_address: '172.24.71.206'
-  left_xarm_ip: '192.168.86.216'
-  right_xarm_ip: '192.168.86.230'
-
-  # Transformation ports
-  oculus_reciever_port: 8087
-  left_hand_receiver_port: 8110
-  keypoint_port: 8088
-  transformed_position_keypoint_port: 8089
-  transformed_position_left_keypoint_port: 8099
-  transformed_velocity_keypoint_port: 8090
-
-  # Camera offsets
-  cam_port_offset: 10005
-
-  # Graph stream
-  oculus_graph_port: 15001
-
-  # Deployment port
-  deployment_port: 10000
-
-  pre_action_thumb_ee_position_port: 8091
-  post_action_thumb_ee_position_port: 8092
-
-  sim_image_port: 10005
-
-  fish_eye_cam_port_offset: 10010
-
-  resolution_button_port: 8095
-  resolution_button_publish_port: 8093
-  teleop_reset_port: 8100
-  teleop_reset_publish_port: 8102
-  gripper_publish_port_right: 8108
-  gripper_publish_port_left: 8115
-
-  cartesian_publisher_port: 8118
-  joint_publisher_port: 8119
-  cartesian_command_publisher_port: 8120
-
-  cartesian_publisher_port_left: 8116
-  joint_publisher_port_left: 8117
-  cartesian_command_publisher_port_left: 8121
-
-  # To run the robot
-  operate: true
-  sim_env: false
-  run_xela: false
-
-  # Visualize 3D and 2D plots
-  visualize_xela: false
-  visualize_right_2d: false
-  visualize_right_3d: false
-  visualize_right_dir: false
+gello:
+  base_index: 8
+  baud_rate: 115200
+  port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTA2U2GH-if00-port0"
+  joint_signs:
+    - 1
+    - -1
+    - 1
+    - 1
+    - 1
+    - -1
+    - 1
+  start_joints:
+    - 0
+    - 0
+    - 0
+    - -1.57
+    - 0
+    - 1.57
+    - 0
 
 hydra:
   output_subdir: null

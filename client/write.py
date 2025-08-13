@@ -1,40 +1,55 @@
 from pathlib import Path
 from typing import List
 
+import cv2
 import numpy as np
 import zarr
 from omegaconf import DictConfig
 
 class DataWriter:
     class _CaptureWriter:
-        def __init__(self, path: Path, frame_width: int, frame_height: int, block_size: int):
+        def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int, fps: int):
             self._path = path
+            self._max_episode_len = max_episode_len
+            self._frame_width = frame_width
+            self._frame_height = frame_height
+            self._highest_seen_timestep = -1
             self._path.mkdir()
-            self._block_size = block_size
             self._rgb_path = self._path / "rgb.mp4"
-            depth_store = zarr.DirectoryStore(str(self._path / "depth.zarr"))
-            self._depth = zarr.zeros(shape=(0, frame_height, frame_width),
-                                     chunks=(self._block_size, None, None),
-                                     dtype=np.int16,
-                                     store=depth_store)
-            self._rgb_cache = np.zeros((self._block_size, frame_width, frame_height, 3), dtype=np.uint8)
-            self._rgb_cache_mask = np.full((self._block_size), fill_value=False)
-
-        def _dump_rgb_cache(self):
-            # TODO: dump block to disk with decord
-            self._rgb_cache_mask = np.full((self._block_size), fill_value=False)
+            self._fps = fps
+            self._depth_store = zarr.DirectoryStore(str(self._path / "depth.zarr"))
+            self._depth_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint16)
+            self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width, 3), dtype=np.uint8)
 
         def write_frame(self, timestep, color, depth):
-            cache_idx = timestep % self._block_size
-            assert not self._rgb_cache_mask[cache_idx]
-            self._rgb_cache[cache_idx] = color
-            self._rgb_cache_mask[cache_idx] = True
-            if cache_idx == self._block_size - 1:
-                self._dump_rgb_cache()
-            self._depth[timestep] = depth
+            if color is not None:
+                self._rgb_cache[timestep] = color
+            if depth is not None:
+                self._depth_cache[timestep] = depth
+            self._highest_seen_timestep = max(timestep, self._highest_seen_timestep)
 
-    def __init__(self, path: Path, max_episode_len: int, n_cameras: int, captures: DictConfig):
-        self._path = path
+        def flush(self):
+            depth_arr = zarr.array(self._depth_cache[:self._highest_seen_timestep],
+                       chunks=(16, None, None),
+                       dtype=np.int16,
+                       store=self._depth_store)
+            rgb_data = self._rgb_cache[:self._highest_seen_timestep]
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            rgb_out = cv2.VideoWriter(str(self._rgb_path), fourcc, self._fps, (int(self._frame_width), int(self._frame_height)), True)
+            for rgb_frame in rgb_data:
+                rgb_out.write(rgb_frame)
+            rgb_out.release()
+
+    def __init__(self, episodes_path: str, max_episode_len: int, n_cameras: int, captures: DictConfig):
+        self._base_episodes_path = Path(episodes_path)
+        self._base_episodes_path.mkdir(exist_ok=True, parents=True)
+        ep_idxs = [int(x.stem.split("_")[-1]) for x in self._base_episodes_path.iterdir()]
+        ep_idx = 0
+        if len(ep_idxs) > 0:
+            ep_idx = max(ep_idxs) + 1
+        current_episode_name = f"episode_{ep_idx}"
+        self._path = self._base_episodes_path / current_episode_name
+        self._path.mkdir(exist_ok=False)
         self._store = zarr.DirectoryStore(str(self._path / "episode.zarr"))
         self._root = zarr.group(store=self._store)
         self._n_cameras = n_cameras
@@ -71,3 +86,10 @@ class DataWriter:
                 )
             self._root[k][timestep] = v
         self._highest_seen_timestep = max(self._highest_seen_timestep, timestep)
+
+
+    def flush(self):
+        # Only captures require flushing at the end of the collection
+        for cap in self._captures:
+            cap.flush()
+

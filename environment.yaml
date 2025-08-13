@@ -8,27 +8,16 @@ channels:
 dependencies:
   - python=3.8
   - polymetis
+  - zarr
+  - tqdm
+  - h5py
+  - Flask
+  - blosc
+  - librealsense
+  - Pillow
+  - hydra-core
   - pip
   - pip:
-      - some-package
-      - pyzmq
-      - scipy
-      - h5py
-      - Flask
-      - blosc==1.11.1
-      - ikpy
-      - shapely
-      - rospkg
-      - IPython
-      - pyrealsense2
       - opencv-contrib-python
-      - pyquaternion
-      - Pillow
-      - termcolor 
-      - numpy-quaternion
-      - tyro
-      - pure-python-adb
-      - dm_control
-      - xarm
-      - xarm-python-sdk
-      - zmq
+      - pyrealsense2
+
