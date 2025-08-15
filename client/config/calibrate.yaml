@@ -1,9 +1,9 @@
-max_episode_timesteps: 2000
+max_episode_timesteps: 200
 
 realsense:
   width: 1280
   height: 720
-  fps: 15
+  fps: 6
 
 writer:
   episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/outputs/calibration"
@@ -19,7 +19,6 @@ writer:
     frame_width: ${realsense.width}
     frame_height: ${realsense.height}
     max_episode_len: ${writer.max_episode_len}
-    fps: ${realsense.fps}
 
 hydra:
   output_subdir: null

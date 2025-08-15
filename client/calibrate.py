@@ -48,7 +48,7 @@ class KalibrInterface:
             print(output.decode())
 
 
-@hydra.main(config_path="calibrate", config_name="collect")
+@hydra.main(config_path="config", config_name="calibrate")
 def main(cfg: DictConfig):
     realsense = RealSenseInterface(**cfg.realsense)
     writer = KalibrWriter(**cfg.writer)
@@ -60,8 +60,8 @@ def main(cfg: DictConfig):
     writer.flush()
 
 
-    kalibr = KalibrInterface(writer.path)
-    kalibr.run_calibration(cfg.folder)
+    kalibr = KalibrInterface()
+    kalibr.run_calibration(writer.path)
 
 if __name__ == "__main__":
     main()

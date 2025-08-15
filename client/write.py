@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import yaml
 import zarr
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
 class KalibrWriter:
@@ -21,7 +21,7 @@ class KalibrWriter:
             self._timestamps = np.zeros((max_episode_len,), dtype=np.uint64)
 
         def write_frame(self, timestamp, color):
-            self._rgb_cache[self._highest_seen_index] = color
+            self._rgb_cache[self._highest_seen_index] = cv2.cvtColor(color, cv2.COLOR_RGB2GRAY)
             self._timestamps[self._highest_seen_index] = timestamp
             self._highest_seen_index = self._highest_seen_index + 1
 
@@ -45,7 +45,8 @@ class KalibrWriter:
         self.path.mkdir(exist_ok=False)
 
         with open(self.path / "target.yaml", "w") as f:
-            yaml.dump(target.to_container(), f, default_flow_style=False)
+            target_dict = OmegaConf.to_container(target, resolve=True)
+            yaml.dump(target_dict, f, default_flow_style=False)
 
         self._n_cameras = n_cameras
         self._max_episode_len = max_episode_len
@@ -60,7 +61,7 @@ class KalibrWriter:
         return cap_writers
 
     def write_frame(self, timestamp, grayscale):
-        for cap, col, dep in zip(self._captures, grayscale):
+        for cap, col in zip(self._captures, grayscale):
             cap.write_frame(timestamp, col)
 
     def flush(self):
