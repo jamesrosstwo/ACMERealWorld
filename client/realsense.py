@@ -35,6 +35,10 @@ class RealSenseInterface:
                 except Exception as e:
                     print(f"Camera {self.idx} failed to grab frame: {e}")
 
+    @property
+    def n_cameras(self):
+        return len(self._pipelines)
+
     def __init__(self, n_frames: int, width: int , height: int, fps: int, frame_callback: Callable):
         rs.log_to_console(min_severity=rs.log_severity.warn)
 
@@ -48,10 +52,10 @@ class RealSenseInterface:
         self._frame_callback = frame_callback
         self._frame_counts = defaultdict(int)
 
-        def _callback_wrapper(cap_idx, **data):
-            self._frame_callback(cap_idx, **data)
+        def _callback_wrapper(cap_idx, *data, **data_kwargs):
+            self._frame_callback(cap_idx, *data, **data_kwargs)
             self._frame_counts[cap_idx] += 1
-            if self._frame_counts[cap_idx] > self._n_frames:
+            if self._frame_counts[cap_idx] >= self._n_frames:
                 self.stop_capture(cap_idx)
 
         for idx, (pipe, align) in enumerate(zip(self._pipelines, self._aligners)):
@@ -81,7 +85,7 @@ class RealSenseInterface:
 
 
     def stop_capture(self, capture_idx: int):
-        pass
+        self._stop_events[capture_idx].set()
 
     def shutdown(self):
         self._stop_event.set()

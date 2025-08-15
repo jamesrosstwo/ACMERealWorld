@@ -1,6 +1,6 @@
-
+n_frames: 2000
 realsense:
-  n_frames: 200
+  n_frames: ${n_frames}
   width: 1280
   height: 720
   fps: 6
@@ -13,7 +13,7 @@ writer:
     targetRows: 4
     rowSpacingMeters: 0.04      #size of one chessboard square [m]
     colSpacingMeters: 0.04      #size of one chessboard square [m]
-  max_episode_len: ${max_episode_timesteps}
+  max_episode_len: ${n_frames}
   n_cameras: 4
   captures:
     frame_width: ${realsense.width}

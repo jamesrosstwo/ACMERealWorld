@@ -1,9 +1,11 @@
 import os
+import time
 from collections import defaultdict
 from pathlib import Path
 
 import docker
 import hydra
+import numpy as np
 from omegaconf import DictConfig
 from tqdm import tqdm
 
@@ -23,10 +25,7 @@ class KalibrInterface:
         cmd = (
             "source /catkin_ws/devel/setup.bash && "
             "rosrun kalibr kalibr_bagcreater --folder /data --output-bag /catkin_ws/calib_0.bag && "
-            "rosrun kalibr kalibr_calibrate_cameras "
-            "--bag /catkin_ws/calib_0.bag --target /data/target.yaml "
-            "--models pinhole-radtan pinhole-radtan pinhole-radtan "
-            "--topics /cam0/image_raw /cam1/image_raw /cam2/image_raw --dont-show-report"
+            "rosrun kalibr kalibr_calibrate_cameras --bag /catkin_ws/calib_0.bag --target /data/target.yaml --models pinhole-radtan pinhole-radtan pinhole-radtan pinhole-radtan --topics /cam_0/image_raw /cam_1/image_raw /cam_2/image_raw --dont-show-report"
         )
 
         container = self._client.containers.run(
@@ -56,11 +55,16 @@ def gather_data(n_frames: int, writer: DictConfig, realsense: DictConfig) -> Pat
     def on_receive_frame(cap_idx, color, color_tmstmp, depth, depth_tmstmp):
         writer.write_capture_frame(cap_idx, color_tmstmp, color)
         counts[cap_idx] += 1
-        if all(counts.values()) >= n_frames:
-            writer.flush()
-            return writer.path
 
-    RealSenseInterface(**realsense, frame_callback=on_receive_frame)
+
+    rs_interface = RealSenseInterface(**realsense, frame_callback=on_receive_frame)
+    for i in range(rs_interface.n_cameras):
+        counts[i] = 0
+    while any([c < n_frames for c in counts.values()]):
+        time.sleep(5.0)
+        print("Progress:", np.array(list(counts.values())) / n_frames)
+    writer.flush()
+    return writer.path
 
 
 @hydra.main(config_path="config", config_name="calibrate")

@@ -65,6 +65,7 @@ class KalibrWriter:
 
     def flush(self):
         # Only captures require flushing at the end of the collection
+        print("FLUSHING CAPTURES")
         for cap in self._captures:
             cap.flush()
 
