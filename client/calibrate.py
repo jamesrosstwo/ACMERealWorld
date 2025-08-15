@@ -1,9 +1,7 @@
 from pathlib import Path
-from typing import Dict
 
 import docker
 import hydra
-import yaml
 from omegaconf import DictConfig
 from tqdm import tqdm
 
@@ -33,19 +31,17 @@ class KalibrInterface:
             remove=True
         )
 
-        commands = [
-            "source devel/setup.bash",
-            "rosrun kalibr kalibr_bagcreater --folder /data --output-bag calib_0.bag",
+        cmd = (
+            "source /catkin_ws/devel/setup.bash && "
+            "rosrun kalibr kalibr_bagcreater --folder /data --output-bag /catkin_ws/calib_0.bag && "
             "rosrun kalibr kalibr_calibrate_cameras "
             "--bag /catkin_ws/calib_0.bag --target /data/target.yaml "
-            "--models pinhole-radtan pinhole-radtan pinhole-radtan pinhole-radtan "
-            "--topics /cam0/image_raw /cam1/image_raw /cam2/image_raw /cam3/image_raw --dont-show-report"
-        ]
+            "--models pinhole-radtan pinhole-radtan pinhole-radtan"
+            "--topics /cam0/image_raw /cam1/image_raw /cam2/image_raw --dont-show-report"
+        )
 
-        for cmd in commands:
-            exit_code, output = container.exec_run(f"bash -c '{cmd}'", tty=True)
-            print(f"Ran: {cmd}")
-            print(output.decode())
+        exit_code, output = container.exec_run(f"bash -c '{cmd}'", tty=True)
+        print(output.decode())
 
 
 @hydra.main(config_path="calibrate", config_name="collect")
