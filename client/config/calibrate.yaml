@@ -1,0 +1,21 @@
+max_episode_timesteps: 2000
+
+realsense:
+  width: 1280
+  height: 720
+  fps: 15
+
+writer:
+  episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/outputs/calibration"
+  max_episode_len: ${max_episode_timesteps}
+  n_cameras: 4
+  captures:
+    frame_width: ${realsense.width}
+    frame_height: ${realsense.height}
+    max_episode_len: ${writer.max_episode_len}
+    fps: ${realsense.fps}
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .

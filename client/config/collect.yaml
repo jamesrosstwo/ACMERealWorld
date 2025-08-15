@@ -9,7 +9,7 @@ realsense:
   fps: 15
 
 writer:
-  episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/episodes"
+  episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/output/episodes"
   max_episode_len: ${max_episode_timesteps}
   n_cameras: 4
   captures:

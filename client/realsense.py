@@ -1,7 +1,6 @@
 import threading
 import queue
 import numpy as np
-from tqdm import tqdm
 from client.record import start_pipeline, enumerate_devices, get_tmstmp
 
 
@@ -65,13 +64,6 @@ class RealSenseInterface:
             pipelines.append(pipe)
             aligners.append(align)
         return pipelines, aligners
-
-    def get_synchronized_frames(self, n):
-        for _ in tqdm(range(n)):
-            frame_data = [q.get() for q in self._frame_queues]
-            colors = [fd[0] for fd in frame_data]
-            depths = [fd[1] for fd in frame_data]
-            yield colors, depths
 
     def get_synchronized_frame(self):
         frame_data = [q.get() for q in self._frame_queues]
