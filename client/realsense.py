@@ -2,6 +2,7 @@ import threading
 import queue
 import numpy as np
 from client.record import start_pipeline, enumerate_devices, get_tmstmp
+import pyrealsense2 as rs
 
 
 class RealSenseInterface:
@@ -34,6 +35,8 @@ class RealSenseInterface:
                     self.out_queue.put(((None, None), (None, None)))
 
     def __init__(self, width, height, fps):
+        rs.log_to_console(min_severity=rs.log_severity.warn)
+
         self._width = width
         self._height = height
         self._fps = fps
