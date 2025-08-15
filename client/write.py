@@ -60,9 +60,8 @@ class KalibrWriter:
             cap_writers.append(cw)
         return cap_writers
 
-    def write_captures_frame(self, timestamps, rgbs):
-        for cap, timestamp, rgb in zip(self._captures, timestamps, rgbs):
-            cap.write_frame(timestamp, rgb)
+    def write_capture_frame(self, cap_idx, timestamp, rgb):
+        self._captures[cap_idx].write_frame(timestamp, rgb)
 
     def flush(self):
         # Only captures require flushing at the end of the collection

@@ -1,6 +1,6 @@
-max_episode_timesteps: 200
 
 realsense:
+  n_frames: 200
   width: 1280
   height: 720
   fps: 6

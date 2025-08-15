@@ -1,4 +1,5 @@
 import os
+from collections import defaultdict
 from pathlib import Path
 
 import docker
@@ -7,7 +8,7 @@ from omegaconf import DictConfig
 from tqdm import tqdm
 
 from client.realsense import RealSenseInterface
-from client.write import ACMEWriter, KalibrWriter
+from client.write import KalibrWriter
 
 
 class KalibrInterface:
@@ -46,20 +47,26 @@ class KalibrInterface:
         )
 
 
+def gather_data(n_frames: int, writer: DictConfig, realsense: DictConfig) -> Path:
+    n_frames: int = n_frames
+    writer = KalibrWriter(**writer)
+
+    counts = defaultdict(int)
+
+    def on_receive_frame(cap_idx, color, color_tmstmp, depth, depth_tmstmp):
+        writer.write_capture_frame(cap_idx, color_tmstmp, color)
+        counts[cap_idx] += 1
+        if all(counts.values()) >= n_frames:
+            writer.flush()
+            return writer.path
+
+    RealSenseInterface(**realsense, frame_callback=on_receive_frame)
+
+
 @hydra.main(config_path="config", config_name="calibrate")
 def main(cfg: DictConfig):
-    realsense = RealSenseInterface(**cfg.realsense)
-    writer = KalibrWriter(**cfg.writer)
-
-    for i in tqdm(range(cfg.max_episode_timesteps)):
-        colors, color_timesteps, depths, depth_timestamps = realsense.get_synchronized_frame()
-        writer.write_captures_frame(color_timesteps, colors)
-    realsense.shutdown()
-    writer.flush()
-
-    kalibr = KalibrInterface()
-    kalibr.run_calibration(writer.path)
-
+    calibration_episode_path = gather_data(cfg.n_frames, cfg.writer, cfg.realsense)
+    KalibrInterface().run_calibration(calibration_episode_path)
 
 if __name__ == "__main__":
     main()
