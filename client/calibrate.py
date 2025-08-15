@@ -51,7 +51,7 @@ def main(cfg: DictConfig):
 
     for i in tqdm(range(cfg.max_episode_timesteps)):
         colors, color_timesteps, depths, depth_timestamps = realsense.get_synchronized_frame()
-        writer.write_frame(i, colors)
+        writer.write_captures_frame(color_timesteps, colors)
     realsense.shutdown()
     writer.flush()
 

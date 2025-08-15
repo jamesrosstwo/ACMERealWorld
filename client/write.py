@@ -17,18 +17,18 @@ class KalibrWriter:
             self._frame_width = frame_width
             self._frame_height = frame_height
             self._highest_seen_index = 0
-            self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint8)
+            self._grayscale_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint8)
             self._timestamps = np.zeros((max_episode_len,), dtype=np.uint64)
 
         def write_frame(self, timestamp, color):
-            self._rgb_cache[self._highest_seen_index] = cv2.cvtColor(color, cv2.COLOR_RGB2GRAY)
+            self._grayscale_cache[self._highest_seen_index] = cv2.cvtColor(color, cv2.COLOR_RGB2GRAY)
             self._timestamps[self._highest_seen_index] = timestamp
             self._highest_seen_index = self._highest_seen_index + 1
 
         def flush(self):
             for index in range(self._highest_seen_index):
-                rgb_frame: np.ndarray = self._rgb_cache[index]
-                timestamp_us = self._timestamps[index] * 1000000
+                rgb_frame: np.ndarray = self._grayscale_cache[index]
+                timestamp_us = int(self._timestamps[index]) * 1000000
                 out_path = self._path / f"{timestamp_us}.png"
                 cv2.imwrite(str(out_path), rgb_frame)
 
@@ -60,9 +60,9 @@ class KalibrWriter:
             cap_writers.append(cw)
         return cap_writers
 
-    def write_frame(self, timestamp, grayscale):
-        for cap, col in zip(self._captures, grayscale):
-            cap.write_frame(timestamp, col)
+    def write_captures_frame(self, timestamps, rgbs):
+        for cap, timestamp, rgb in zip(self._captures, timestamps, rgbs):
+            cap.write_frame(timestamp, rgb)
 
     def flush(self):
         # Only captures require flushing at the end of the collection
