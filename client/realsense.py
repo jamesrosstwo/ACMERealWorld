@@ -69,9 +69,9 @@ class RealSenseInterface:
         frame_data = [q.get() for q in self._frame_queues]
         cols = [fd[0] for fd in frame_data]
         ds = [fd[1] for fd in frame_data]
-        colors, color_timesteps = zip(*cols)
-        depths, depth_timesteps = zip(*ds)
-        return colors, color_timesteps, depths, depth_timesteps
+        colors, color_timestamps = zip(*cols)
+        depths, depth_timestamps = zip(*ds)
+        return colors, color_timestamps, depths, depth_timestamps
 
     def shutdown(self):
         self._stop_event.set()

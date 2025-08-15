@@ -1,12 +1,75 @@
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 import cv2
 import numpy as np
+import yaml
 import zarr
 from omegaconf import DictConfig
 
-class DataWriter:
+
+class KalibrWriter:
+    class _CaptureWriter:
+        def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int):
+            self._path = path
+            self._path.mkdir()
+            self._max_episode_len = max_episode_len
+            self._frame_width = frame_width
+            self._frame_height = frame_height
+            self._highest_seen_index = 0
+            self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint8)
+            self._timestamps = np.zeros((max_episode_len,), dtype=np.uint64)
+
+        def write_frame(self, timestamp, color):
+            self._rgb_cache[self._highest_seen_index] = color
+            self._timestamps[self._highest_seen_index] = timestamp
+            self._highest_seen_index = self._highest_seen_index + 1
+
+        def flush(self):
+            for index in range(self._highest_seen_index):
+                rgb_frame: np.ndarray = self._rgb_cache[index]
+                timestamp_us = self._timestamps[index] * 1000000
+                out_path = self._path / f"{timestamp_us}.png"
+                cv2.imwrite(str(out_path), rgb_frame)
+
+    def __init__(self, episodes_path: str, target: DictConfig, max_episode_len: int, n_cameras: int, captures: DictConfig):
+        self._base_episodes_path = Path(episodes_path)
+        self._base_episodes_path.mkdir(exist_ok=True, parents=True)
+
+        ep_idxs = [int(x.stem.split("_")[-1]) for x in self._base_episodes_path.iterdir()]
+        ep_idx = 0
+        if len(ep_idxs) > 0:
+            ep_idx = max(ep_idxs) + 1
+        current_episode_name = f"calibration_{ep_idx}"
+        self.path = self._base_episodes_path / current_episode_name
+        self.path.mkdir(exist_ok=False)
+
+        with open(self.path / "target.yaml", "w") as f:
+            yaml.dump(target.to_container(), f, default_flow_style=False)
+
+        self._n_cameras = n_cameras
+        self._max_episode_len = max_episode_len
+        self._captures: List = self._init_captures(captures)
+
+    def _init_captures(self, captures: DictConfig):
+        cap_writers = []
+        for i in range(self._n_cameras):
+            c_path = self.path / f"cam_{i}"
+            cw = self._CaptureWriter(c_path, **captures)
+            cap_writers.append(cw)
+        return cap_writers
+
+    def write_frame(self, timestamp, grayscale):
+        for cap, col, dep in zip(self._captures, grayscale):
+            cap.write_frame(timestamp, col)
+
+    def flush(self):
+        # Only captures require flushing at the end of the collection
+        for cap in self._captures:
+            cap.flush()
+
+
+class ACMEWriter:
     class _CaptureWriter:
         def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int, fps: int):
             self._path = path
@@ -30,12 +93,13 @@ class DataWriter:
 
         def flush(self):
             depth_arr = zarr.array(self._depth_cache[:self._highest_seen_timestep],
-                       chunks=(16, None, None),
-                       dtype=np.int16,
-                       store=self._depth_store)
+                                   chunks=(16, None, None),
+                                   dtype=np.int16,
+                                   store=self._depth_store)
             rgb_data = self._rgb_cache[:self._highest_seen_timestep]
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            rgb_out = cv2.VideoWriter(str(self._rgb_path), fourcc, self._fps, (int(self._frame_width), int(self._frame_height)), True)
+            rgb_out = cv2.VideoWriter(str(self._rgb_path), fourcc, self._fps,
+                                      (int(self._frame_width), int(self._frame_height)), True)
             for rgb_frame in rgb_data:
                 rgb_out.write(rgb_frame)
             rgb_out.release()
@@ -87,9 +151,7 @@ class DataWriter:
             self._root[k][timestep] = v
         self._highest_seen_timestep = max(self._highest_seen_timestep, timestep)
 
-
     def flush(self):
         # Only captures require flushing at the end of the collection
         for cap in self._captures:
             cap.flush()
-

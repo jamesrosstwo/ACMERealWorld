@@ -8,7 +8,7 @@ from tqdm import tqdm
 from client.nuc import NUCInterface
 from client.realsense import RealSenseInterface
 from client.teleop import GELLOInterface
-from client.write import DataWriter
+from client.write import ACMEWriter
 
 
 import threading
@@ -56,7 +56,7 @@ def main(cfg: DictConfig):
     nuc = NUCInterface(**cfg.nuc)
     realsense = RealSenseInterface(**cfg.realsense)
     gello = GELLOInterface(**cfg.gello)
-    writer = DataWriter(**cfg.writer)
+    writer = ACMEWriter(**cfg.writer)
     stop_control, get_action = start_control_loop(gello, nuc)
 
     for i in tqdm(range(cfg.max_episode_timesteps)):

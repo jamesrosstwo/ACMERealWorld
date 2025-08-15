@@ -1,7 +1,10 @@
 max_episode_timesteps: 150
 
 nuc:
+  user: "${oc.env:NUC_USER}"
+  pwd: "${oc.env:NUC_PWD}"
   ip: "192.168.1.106"
+  franka_ip: "192.168.1.107"
 
 realsense:
   width: 1280

@@ -12,10 +12,12 @@ dependencies:
   - tqdm
   - h5py
   - Flask
+  - docker-py
   - blosc
   - librealsense
   - Pillow
   - hydra-core
+  - paramiko
   - pip
   - pip:
       - opencv-contrib-python

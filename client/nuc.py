@@ -1,17 +1,22 @@
 import torch
 from polymetis import RobotInterface, GripperInterface
+import paramiko
 
 
 class NUCInterface:
-    def __init__(self, ip: str):
+    def _launch_server(self):
+        cmd = f"conda run -n nuc_polymetis_server python $CONDA_PREFIX/bin/launch_robot.py robot_client=franka_hardware robot_client.executable.robot_ip=\"{self._franka_ip}\""
+
+    def __init__(self, ip: str, franka_ip: str):
+        self._franka_ip = franka_ip
         self._nuc_ip = ip
+
         self._robot = RobotInterface(
             ip_address=self._nuc_ip,
         )
         self._gripper = GripperInterface(
             ip_address="localhost",
         )
-
 
     def get_robot_state(self):
         # gripper_state = self._gripper.get_state()

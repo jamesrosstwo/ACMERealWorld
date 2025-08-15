@@ -7,6 +7,12 @@ realsense:
 
 writer:
   episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/outputs/calibration"
+  target:
+    target_type: 'checkerboard'
+    targetCols: 8
+    targetRows: 4
+    rowSpacingMeters: 0.04      #size of one chessboard square [m]
+    colSpacingMeters: 0.04      #size of one chessboard square [m]
   max_episode_len: ${max_episode_timesteps}
   n_cameras: 4
   captures:
