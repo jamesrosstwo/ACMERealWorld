@@ -77,7 +77,7 @@ class ACMEWriter:
             self._max_episode_len = max_episode_len
             self._frame_width = frame_width
             self._frame_height = frame_height
-            self._highest_seen_timestep = -1
+            self.highest_written_index = 0
             self._path.mkdir()
             self._rgb_path = self._path / "rgb.mp4"
             self._fps = fps
@@ -85,19 +85,17 @@ class ACMEWriter:
             self._depth_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint16)
             self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width, 3), dtype=np.uint8)
 
-        def write_frame(self, timestep, color, depth):
-            if color is not None:
-                self._rgb_cache[timestep] = color
-            if depth is not None:
-                self._depth_cache[timestep] = depth
-            self._highest_seen_timestep = max(timestep, self._highest_seen_timestep)
+        def write_frame(self, color, depth):
+            self._rgb_cache[self.highest_written_index] = color
+            self._depth_cache[self.highest_written_index] = depth
+            self.highest_written_index += 1
 
         def flush(self):
-            depth_arr = zarr.array(self._depth_cache[:self._highest_seen_timestep],
+            depth_arr = zarr.array(self._depth_cache[:self.highest_written_index],
                                    chunks=(16, None, None),
                                    dtype=np.int16,
                                    store=self._depth_store)
-            rgb_data = self._rgb_cache[:self._highest_seen_timestep]
+            rgb_data = self._rgb_cache[:self.highest_written_index]
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             rgb_out = cv2.VideoWriter(str(self._rgb_path), fourcc, self._fps,
                                       (int(self._frame_width), int(self._frame_height)), True)
@@ -120,8 +118,6 @@ class ACMEWriter:
         self._n_cameras = n_cameras
         self._max_episode_len = max_episode_len
         self._captures: List = self._init_captures(captures)
-        self._highest_seen_timestep = 0
-        self._written_timesteps = np.full((self._max_episode_len,), False)
 
     def _init_captures(self, captures: DictConfig):
         capture_path_base = self._path / "captures"
@@ -134,13 +130,14 @@ class ACMEWriter:
             cap_writers.append(cw)
         return cap_writers
 
-    # Write a single frame for all cameras
-    def write_frame(self, timestep, colors, depths):
+    def write_frame(self, colors, depths):
         for cap, col, dep in zip(self._captures, colors, depths):
-            cap.write_frame(timestep, col, dep)
-        self._highest_seen_timestep = max(self._highest_seen_timestep, timestep)
+            cap.write_frame(col, dep)
 
-    def write_state(self, timestep, **state):
+    def write_capture_frame(self, capture_index, timestamp, color, depth):
+        self._captures[capture_index].write_frame(timestamp, color, depth)
+
+    def write_state(self, **state):
         for k, v in state.items():
             if k not in self._root:
                 self._root.create_dataset(
@@ -149,8 +146,7 @@ class ACMEWriter:
                     chunks=(self._max_episode_len, *v.shape),
                     dtype=v.dtype,
                 )
-            self._root[k][timestep] = v
-        self._highest_seen_timestep = max(self._highest_seen_timestep, timestep)
+            self._root[k][self._captures[0].highest_seen_index] = v
 
     def flush(self):
         # Only captures require flushing at the end of the collection
