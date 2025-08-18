@@ -60,3 +60,88 @@
 [2025-08-13 11:48:53,653][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-08-13 12:13:17,033][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-08-13 12:13:46,919][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-08-17 17:28:47,747][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 17:28:47,840][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:28:47,849][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:28:47,861][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 17:38:54,345][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 17:38:54,370][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:38:54,379][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:38:54,596][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 17:39:30,803][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 17:39:30,828][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:39:30,836][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:39:30,849][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 17:49:44,548][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 17:49:44,571][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:49:44,579][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:49:44,592][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 17:50:15,790][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 17:50:15,813][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:50:15,821][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:50:15,833][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 17:52:12,313][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 17:52:12,336][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:52:12,344][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 17:52:12,356][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:00:13,500][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:00:13,523][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:00:13,531][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:00:13,544][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:00:36,328][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:00:36,353][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:00:36,360][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:00:36,373][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:03:40,030][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:03:40,053][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:03:40,061][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:03:40,074][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:04:26,043][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:04:26,068][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:04:26,076][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:04:26,089][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:04:46,032][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:04:46,055][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:04:46,062][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:04:46,074][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:11:36,744][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:11:36,770][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:11:36,780][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:11:36,795][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:12:43,684][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:12:43,707][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:12:43,717][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:12:43,730][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:13:48,999][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:13:49,021][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:13:49,031][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:13:49,044][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:15:14,173][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:15:14,194][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:15:14,203][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:15:14,213][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:18:18,406][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:18:18,431][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:18:18,442][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:18:18,457][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:18:49,676][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:18:49,701][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:18:49,711][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:18:49,726][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:19:53,292][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:19:53,317][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:19:53,328][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:19:53,343][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:21:34,098][paramiko.transport][INFO] - Connected (version 2.0, client OpenSSH_8.2p1)
+[2025-08-17 18:21:34,121][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:21:34,131][paramiko.transport][INFO] - Authentication (publickey) failed.
+[2025-08-17 18:21:34,140][paramiko.transport][INFO] - Authentication (password) successful!
+[2025-08-17 18:21:54,337][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-08-17 18:39:18,442][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-08-17 18:39:52,351][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-08-17 18:40:48,660][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-08-17 18:53:44,341][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-08-17 19:15:35,546][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-08-17 19:25:20,680][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-08-17 19:30:12,151][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-08-17 19:40:33,558][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.

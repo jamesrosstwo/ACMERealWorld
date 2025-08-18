@@ -1,9 +1,9 @@
-n_frames: 2000
+n_frames: 4000
 realsense:
   n_frames: ${n_frames}
   width: 1280
   height: 720
-  fps: 6
+  fps: 15
 
 writer:
   episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/outputs/calibration"

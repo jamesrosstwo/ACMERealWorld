@@ -1,4 +1,5 @@
 import threading
+import traceback
 from collections import defaultdict
 from typing import Callable
 
@@ -31,9 +32,16 @@ class RealSenseInterface:
                     depth_ts = get_tmstmp(depth_frame)
                     color_ts = get_tmstmp(color_frame)
 
-                    self.callback(self.idx, color, color_ts, depth, depth_ts)
+                    self.callback(
+                        self.idx,
+                        color=color,
+                        color_tmstmp=color_ts,
+                        depth=depth,
+                        depth_tmstmp=depth_ts
+                    )
                 except Exception as e:
                     print(f"Camera {self.idx} failed to grab frame: {e}")
+                    traceback.print_exc()
 
     @property
     def n_cameras(self):
@@ -52,8 +60,8 @@ class RealSenseInterface:
         self._frame_callback = frame_callback
         self._frame_counts = defaultdict(int)
 
-        def _callback_wrapper(cap_idx, *data, **data_kwargs):
-            self._frame_callback(cap_idx, *data, **data_kwargs)
+        def _callback_wrapper(cap_idx, **data_kwargs):
+            self._frame_callback(capture_idx=cap_idx, **data_kwargs)
             self._frame_counts[cap_idx] += 1
             if self._frame_counts[cap_idx] >= self._n_frames:
                 self.stop_capture(cap_idx)
@@ -88,7 +96,8 @@ class RealSenseInterface:
         self._stop_events[capture_idx].set()
 
     def shutdown(self):
-        self._stop_event.set()
+        for event in self._stop_events:
+            event.set()
         for t in self._threads:
             t.join()
         print("All camera threads stopped.")

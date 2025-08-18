@@ -54,7 +54,7 @@ WORKDIR /ACMERealWorld
 RUN git submodule update --init --recursive 
 RUN conda env create -f environment.yaml
 RUN conda run -n ACMERealWorld pip install -e submodules/gello_software
-RUN conda run -n ACMERealWorld pip install -e submoudles/gello_software/third_party/DynamixelSDK/python
+RUN conda run -n ACMERealWorld pip install -e submodules/gello_software/third_party/DynamixelSDK/python
 
 
 ENTRYPOINT ["/entrypoint.sh"]

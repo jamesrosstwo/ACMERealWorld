@@ -135,18 +135,25 @@ class ACMEWriter:
             cap.write_frame(col, dep)
 
     def write_capture_frame(self, capture_index, timestamp, color, depth):
-        self._captures[capture_index].write_frame(timestamp, color, depth)
+        self._captures[capture_index].write_frame(color, depth)
 
     def write_state(self, **state):
         for k, v in state.items():
             if k not in self._root:
-                self._root.create_dataset(
-                    name=k,
-                    shape=(self._max_episode_len, *v.shape),
-                    chunks=(self._max_episode_len, *v.shape),
-                    dtype=v.dtype,
-                )
-            self._root[k][self._captures[0].highest_seen_index] = v
+                if isinstance(v, (float, int)):
+                    self._root.create_dataset(
+                        name=k,
+                        shape=(self._max_episode_len,),
+                        chunks=(self._max_episode_len,),
+                    )
+                else:
+                    self._root.create_dataset(
+                        name=k,
+                        shape=(self._max_episode_len, *v.shape),
+                        chunks=(self._max_episode_len, *v.shape),
+                        dtype=v.dtype,
+                    )
+            self._root[k][self._captures[0].highest_written_index] = v
 
     def flush(self):
         # Only captures require flushing at the end of the collection

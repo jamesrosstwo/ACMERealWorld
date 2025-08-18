@@ -50,30 +50,28 @@ def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
 @hydra.main(config_path="config", config_name="collect")
 def main(cfg: DictConfig):
     nuc = NUCInterface(**cfg.nuc)
-    realsense = RealSenseInterface(**cfg.realsense)
     gello = GELLOInterface(**cfg.gello)
     writer = ACMEWriter(**cfg.writer)
     stop_control, get_action = start_control_loop(gello, nuc)
 
     counts = defaultdict(int)
 
-    def on_receive_frame(cap_idx, color, color_tmstmp, depth, depth_tmstmp):
-        writer.write_capture_frame(cap_idx, color_tmstmp, color, depth)
-        counts[cap_idx] += 1
-        if cap_idx == 0:
+    def on_receive_frame(capture_idx, color, color_tmstmp, depth, depth_tmstmp):
+        writer.write_capture_frame(capture_idx, color_tmstmp, color, depth)
+        counts[capture_idx] += 1
+        if capture_idx == 0:
             state = nuc.get_robot_state()
             # for episode collection we just assume all cameras are synchronized to cam0,
             # and that this synchronous operation of getting robot state from the NUC takes
             # no time.
-            writer.write_frame(color, depth)
-            writer.write_state(timestep=color_tmstmp, action=get_action(), **state)
+            writer.write_state(timestamp=color_tmstmp, action=get_action(), **state)
 
     rs_interface = RealSenseInterface(**cfg.realsense, frame_callback=on_receive_frame)
     for i in range(rs_interface.n_cameras):
         counts[i] = 0
-    while any([c < cfg.n_frames for c in counts.values()]):
+    while any([c < cfg.max_episode_timesteps for c in counts.values()]):
         time.sleep(2.0)
-        print("Episode progress:", np.array(list(counts.values())) / cfg.n_frames)
+        print("Episode progress:", np.array(list(counts.values())) / cfg.max_episode_timesteps)
     stop_control()
     writer.flush()
     exit(0)

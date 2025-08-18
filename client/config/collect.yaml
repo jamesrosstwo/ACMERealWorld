@@ -1,12 +1,17 @@
-max_episode_timesteps: 150
+max_episode_timesteps: 250
 
 nuc:
-  user: "${oc.env:NUC_USER}"
-  pwd: "${oc.env:NUC_PWD}"
   ip: "192.168.1.106"
   franka_ip: "192.168.1.107"
+  server:
+    ip: ${nuc.ip}
+    port: 22
+    user: ${env:NUC_USER}
+    pwd: ${env:NUC_PWD}
+    conda: "/home/james/anaconda3"
 
 realsense:
+  n_frames: ${max_episode_timesteps}
   width: 1280
   height: 720
   fps: 15
@@ -32,7 +37,7 @@ gello:
     - 1
     - 1
     - 1
-    - -1
+    - 1
     - 1
   start_joints:
     - 0

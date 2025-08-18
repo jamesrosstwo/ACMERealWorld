@@ -1,4 +1,4 @@
-name: ACMERealWorld
+name: ACMECollection
 channels:
   - defaults
   - pytorch

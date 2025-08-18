@@ -1,22 +1,60 @@
+import os
+import threading
+import time
+
 import torch
+from omegaconf import DictConfig
 from polymetis import RobotInterface, GripperInterface
 import paramiko
 
 
-class NUCInterface:
-    def _launch_server(self):
-        cmd = f"conda run -n nuc_polymetis_server python $CONDA_PREFIX/bin/launch_robot.py robot_client=franka_hardware robot_client.executable.robot_ip=\"{self._franka_ip}\""
+def stream_output(stream, prefix=''):
+    for line in iter(stream.readline, ""):
+        print(f"{prefix}{line.strip()}")
 
-    def __init__(self, ip: str, franka_ip: str):
+
+class NUCInterface:
+    def _launch_server(self, conda, ip, port, user, pwd):
+        c = f"{conda}/bin/conda"
+        launch = f"{conda}/envs/nuc_polymetis_server/bin/launch_robot.py"
+        launch_dir = os.path.dirname(launch)
+
+        cmd = (
+            f"cd {launch_dir} && "
+            f"sudo -S {c} run -n nuc_polymetis_server python launch_robot.py "
+            f"robot_client=franka_hardware robot_client.executable_cfg.robot_ip=\"{self._franka_ip}\""
+        )
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(
+            hostname=ip,
+            port=port,
+            username=user,
+            password=pwd,
+        )
+
+        stdin, stdout, stderr = client.exec_command(cmd)
+        stdin.write(pwd + "\n")
+
+        threading.Thread(target=stream_output, args=(stdout,), daemon=True).start()
+        threading.Thread(target=stream_output, args=(stderr, '[ERR] '), daemon=True).start()
+
+        return client
+
+    def __init__(self, ip: str, server: DictConfig, franka_ip: str):
         self._franka_ip = franka_ip
         self._nuc_ip = ip
+        # self._nuc_client = self._launch_server(**server)
+        # print("Waiting for server to start")
+        # time.sleep(20.0)
 
         self._robot = RobotInterface(
             ip_address=self._nuc_ip,
         )
-        self._gripper = GripperInterface(
-            ip_address="localhost",
-        )
+        # self._gripper = GripperInterface(
+        #     ip_address="localhost",
+        # )
 
     def get_robot_state(self):
         # gripper_state = self._gripper.get_state()
@@ -35,7 +73,11 @@ class NUCInterface:
 
     def reset(self):
         self._robot.go_home()
-        self._gripper.goto(width=0, speed=0.05, force=0.1)
+        # self._gripper.goto(width=0, speed=0.05, force=0.1)
 
     def start(self):
         self._robot.start_joint_impedance(self._robot.Kq_default / 10, self._robot.Kqd_default / 10)
+
+    def close(self):
+        # self._nuc_client.close()
+        pass
