@@ -1,7 +1,7 @@
 import threading
 import traceback
 from collections import defaultdict
-from typing import Callable
+from typing import Callable, List
 
 import numpy as np
 from client.record import start_pipeline, enumerate_devices, get_tmstmp
@@ -21,6 +21,7 @@ class RealSenseInterface:
             while not self.stop_event.is_set():
                 try:
                     fs = self.pipe.wait_for_frames(timeout_ms=5000)
+                    print("worked")
                     self.callback(
                         self.idx,
                         fs
@@ -42,21 +43,22 @@ class RealSenseInterface:
         self._height = height
         self._fps = fps
         self._aligner = rs.align(rs.stream.color)
-        self._pipelines = self._initialize_cameras()
+        self._pipelines: List = self._initialize_cameras()
         self._stop_events = []
         self._threads = []
         self.frame_counts = defaultdict(int)
         self._frame_streams = defaultdict(list)
 
-    def start_capture(self, on_receive_frame: Callable):
+    def start_capture(self, on_receive_frame: Callable = None):
         def _callback_wrapper(cap_idx, fs):
-            on_receive_frame(cap_idx)
+            if on_receive_frame is not None:
+                on_receive_frame(cap_idx)
             self.frame_counts[cap_idx] += 1
             self._frame_streams[cap_idx].append(fs)
             if self.frame_counts[cap_idx] >= self._n_frames:
                 self.stop_capture(cap_idx)
 
-        for idx, pipe in enumerate(zip(self._pipelines)):
+        for idx, pipe in enumerate(self._pipelines):
             stop_event = threading.Event()
             t = self._FrameGrabberThread(idx, pipe, _callback_wrapper, stop_event)
             t.start()
@@ -100,9 +102,6 @@ class RealSenseInterface:
             col_tmstmp = get_tmstmp(color)
             dep_tmstmp = get_tmstmp(depth)
             yield color, col_tmstmp, depth, dep_tmstmp
-
-
-
 
 
     def __enter__(self):
