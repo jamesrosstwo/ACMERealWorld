@@ -5,15 +5,15 @@
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
-      <env name="PYTHONUNBUFFERED" value="1" />
       <env name="HYDRA_FULL_ERROR" value="1" />
+      <env name="NUC_PWD" value="james" />
       <env name="NUC_USER" value="james" />
       <env name="RS_LOG_FILE" value="$USER_HOME$/realsense.log" />
-      <env name="NUC_PWD" value="james" />
     </envs>
     <option name="SDK_HOME" value="" />
+    <option name="SDK_NAME" value="ACMECollection" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/client" />
-    <option name="IS_MODULE_SDK" value="true" />
+    <option name="IS_MODULE_SDK" value="false" />
     <option name="ADD_CONTENT_ROOTS" value="true" />
     <option name="ADD_SOURCE_ROOTS" value="true" />
     <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
