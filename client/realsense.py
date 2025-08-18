@@ -47,9 +47,8 @@ class RealSenseInterface:
     def n_cameras(self):
         return len(self._pipelines)
 
-    def __init__(self, n_frames: int, width: int , height: int, fps: int, frame_callback: Callable):
+    def __init__(self, n_frames: int, width: int, height: int, fps: int):
         rs.log_to_console(min_severity=rs.log_severity.warn)
-
         self._n_frames = n_frames
         self._width = width
         self._height = height
@@ -57,11 +56,11 @@ class RealSenseInterface:
         self._pipelines, self._aligners = self._initialize_cameras()
         self._stop_events = []
         self._threads = []
-        self._frame_callback = frame_callback
         self._frame_counts = defaultdict(int)
 
+    def start_capture(self, frame_callback: Callable):
         def _callback_wrapper(cap_idx, **data_kwargs):
-            self._frame_callback(capture_idx=cap_idx, **data_kwargs)
+            frame_callback(capture_idx=cap_idx, **data_kwargs)
             self._frame_counts[cap_idx] += 1
             if self._frame_counts[cap_idx] >= self._n_frames:
                 self.stop_capture(cap_idx)
@@ -91,13 +90,12 @@ class RealSenseInterface:
             aligners.append(align)
         return pipelines, aligners
 
-
     def stop_capture(self, capture_idx: int):
         self._stop_events[capture_idx].set()
 
-    def shutdown(self):
+    def stop_all_captures(self):
         for event in self._stop_events:
             event.set()
         for t in self._threads:
             t.join()
-        print("All camera threads stopped.")
+        print("Capture stopped.")

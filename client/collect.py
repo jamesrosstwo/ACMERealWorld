@@ -12,8 +12,8 @@ from client.teleop import GELLOInterface
 from client.write import ACMEWriter
 import threading
 
+
 def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
-    nuc.reset()
     state = nuc.get_robot_state()
     gello.zero_controls(state["qpos"])
     nuc.start()
@@ -51,30 +51,36 @@ def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
 def main(cfg: DictConfig):
     nuc = NUCInterface(**cfg.nuc)
     gello = GELLOInterface(**cfg.gello)
-    writer = ACMEWriter(**cfg.writer)
-    stop_control, get_action = start_control_loop(gello, nuc)
 
-    counts = defaultdict(int)
+    rs_interface = RealSenseInterface(**cfg.realsense)
 
-    def on_receive_frame(capture_idx, color, color_tmstmp, depth, depth_tmstmp):
-        writer.write_capture_frame(capture_idx, color_tmstmp, color, depth)
-        counts[capture_idx] += 1
-        if capture_idx == 0:
-            state = nuc.get_robot_state()
-            # for episode collection we just assume all cameras are synchronized to cam0,
-            # and that this synchronous operation of getting robot state from the NUC takes
-            # no time.
-            writer.write_state(timestamp=color_tmstmp, action=get_action(), **state)
+    while True:
+        episode_writer = ACMEWriter(**cfg.writer)
+        nuc.reset()
+        stop_control, get_action = start_control_loop(gello, nuc)
+        counts = defaultdict(int)
 
-    rs_interface = RealSenseInterface(**cfg.realsense, frame_callback=on_receive_frame)
-    for i in range(rs_interface.n_cameras):
-        counts[i] = 0
-    while any([c < cfg.max_episode_timesteps for c in counts.values()]):
-        time.sleep(2.0)
-        print("Episode progress:", np.array(list(counts.values())) / cfg.max_episode_timesteps)
-    stop_control()
-    writer.flush()
-    exit(0)
+        def on_receive_frame(capture_idx, color, color_tmstmp, depth, depth_tmstmp):
+            episode_writer.write_capture_frame(capture_idx, color_tmstmp, color, depth)
+            counts[capture_idx] += 1
+            if capture_idx == 0:
+                state = nuc.get_robot_state()
+                # for episode collection we just assume all cameras are synchronized to cam0,
+                # and that this synchronous operation of getting robot state from the NUC takes
+                # no time.
+                episode_writer.write_state(timestamp=color_tmstmp, action=get_action(), **state)
+
+        rs_interface.start_capture(on_receive_frame)
+
+        for i in range(rs_interface.n_cameras):
+            counts[i] = 0
+        while any([c < cfg.max_episode_timesteps for c in counts.values()]):
+            time.sleep(2.0)
+            print("Episode progress:", np.array(list(counts.values())) / cfg.max_episode_timesteps)
+        stop_control()
+        rs_interface.stop_all_captures()
+        episode_writer.flush()
+
 
 if __name__ == "__main__":
     main()
