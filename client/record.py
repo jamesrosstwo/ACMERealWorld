@@ -25,10 +25,6 @@ rosrun kalibr kalibr_calibrate_cameras \
 """
 import time
 import pyrealsense2 as rs
-import numpy as np
-import cv2
-from tqdm import tqdm
-import threading
 
 
 def enumerate_devices():
@@ -53,80 +49,4 @@ def start_pipeline(serial: str, w: int, h: int, fps: int):
 
 
 def get_tmstmp(frame):
-    return frame.get_frame_metadata(rs.frame_metadata_value.time_of_arrival)
-
-def get_synchronized_frames(pipelines, aligners, n=1000):
-    for _ in tqdm(range(n)):
-        frame_data = [None] * len(pipelines)
-
-        def grab(idx):
-            pipe, align = pipelines[idx], aligners[idx]
-            try:
-                fs = pipe.wait_for_frames(timeout_ms=5000)
-                fs = align.process(fs) if align else fs
-                depth_frame = fs.get_depth_frame()
-                color_frame = fs.get_color_frame()
-
-                depth = np.asanyarray(depth_frame.get_data())
-                color = np.asanyarray(color_frame.get_data())
-
-                depth_ts = get_tmstmp(depth_frame)
-                color_ts = get_tmstmp(color_frame)
-
-                frame_data[idx] = ((color, color_ts), (depth, depth_ts))
-            except Exception as e:
-                print(f"Camera {idx} failed to grab frame: {e}")
-                frame_data[idx] = ((None, None), (None, None))
-
-        threads = [threading.Thread(target=grab, args=(i,)) for i in range(len(pipelines))]
-        [t.start() for t in threads]
-        [t.join() for t in threads]
-
-        colors = [fd[0] for fd in frame_data]
-        depths = [fd[1] for fd in frame_data]
-        yield colors, depths
-
-
-def main():
-    cameras = enumerate_devices()
-    if not cameras:
-        print("No RealSense devices detected – exiting.")
-        return
-
-    print(f"Found {len(cameras)} camera(s):")
-    for idx, (serial, product) in enumerate(cameras):
-        print(f"   Camera {idx}: {serial}  ({product})")
-
-    pipelines = []
-    aligners = []
-    system_start_times = []
-    for serial, _ in cameras:
-        pipe, align, sys_time = start_pipeline(serial)
-        pipelines.append(pipe)
-        aligners.append(align)
-        system_start_times.append(sys_time)
-
-    dirs = [out_dir / f"cam_{i}" for i in range(len(pipelines))]
-    for d in dirs:
-        d.mkdir(parents=True, exist_ok=True)
-
-    time.sleep(4.0)
-
-    try:
-        for idx, (colors, depths) in enumerate(get_synchronized_frames(pipelines, aligners)):
-            for cam_dir, (color, color_time), (depth, depth_time) in zip(dirs, colors, depths):
-                if color is not None and color_time is not None:
-                    color_path = cam_dir / f"{color_time}.png"
-                    cv2.imwrite(str(color_path), color)
-
-                if depth is not None and depth_time is not None:
-                    depth_path = cam_dir / f"{color_time}.png"
-                    cv2.imwrite(str(depth_path), depth)
-        print("Frames saved successfully.")
-
-    finally:
-        for p in pipelines:
-            p.stop()
-
-if __name__ == "__main__":
-    main()
+    return frame.get_frame_metadata(rs.frame_metadata_value.backend_timestamp)

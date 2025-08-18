@@ -23,25 +23,27 @@ class RealSenseInterface:
                 try:
                     fs = self.pipe.wait_for_frames(timeout_ms=5000)
                     fs = self.align.process(fs) if self.align else fs
-                    depth_frame = fs.get_depth_frame()
-                    color_frame = fs.get_color_frame()
-
-                    depth = np.asanyarray(depth_frame.get_data())
-                    color = np.asanyarray(color_frame.get_data())
-
-                    depth_ts = get_tmstmp(depth_frame)
-                    color_ts = get_tmstmp(color_frame)
-
+                    # depth_frame = fs.get_depth_frame()
+                    # color_frame = fs.get_color_frame()
+            
+                    # depth = np.asanyarray(depth_frame.get_data())
+                    # color = np.asanyarray(color_frame.get_data())
+                    #
+                    # depth_ts = get_tmstmp(depth_frame)
+                    # color_ts = get_tmstmp(color_frame)
+                    #
                     self.callback(
                         self.idx,
-                        color=color,
-                        color_tmstmp=color_ts,
-                        depth=depth,
-                        depth_tmstmp=depth_ts
+                        color=None,
+                        color_tmstmp=None,
+                        depth=None,
+                        depth_tmstmp=None
                     )
                 except Exception as e:
                     print(f"Camera {self.idx} failed to grab frame: {e}")
                     traceback.print_exc()
+            print(f"Stopping capture pipeline {self.idx}")
+            self.pipe.stop()
 
     @property
     def n_cameras(self):
@@ -99,3 +101,10 @@ class RealSenseInterface:
         for t in self._threads:
             t.join()
         print("Capture stopped.")
+
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop_all_captures()

@@ -21,8 +21,8 @@ class KalibrWriter:
             self._timestamps = np.zeros((max_episode_len,), dtype=np.uint64)
 
         def write_frame(self, timestamp, color):
-            self._grayscale_cache[self._highest_seen_index] = cv2.cvtColor(color, cv2.COLOR_RGB2GRAY)
-            self._timestamps[self._highest_seen_index] = timestamp
+            # self._grayscale_cache[self._highest_seen_index] = cv2.cvtColor(color, cv2.COLOR_RGB2GRAY)
+            # self._timestamps[self._highest_seen_index] = timestamp
             self._highest_seen_index = self._highest_seen_index + 1
 
         def flush(self):
@@ -86,8 +86,8 @@ class ACMEWriter:
             self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width, 3), dtype=np.uint8)
 
         def write_frame(self, color, depth):
-            self._rgb_cache[self.highest_written_index] = color
-            self._depth_cache[self.highest_written_index] = depth
+            # self._rgb_cache[self.highest_written_index] = color
+            # self._depth_cache[self.highest_written_index] = depth
             self.highest_written_index += 1
 
         def flush(self):

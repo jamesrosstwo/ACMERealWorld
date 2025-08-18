@@ -39,8 +39,6 @@ class KalibrInterface:
                 "/tmp/.X11-unix": {"bind": "/tmp/.X11-unix", "mode": "rw"},
                 folder_path: {"bind": "/data", "mode": "rw"}
             },
-            stdin_open=True,
-            tty=True,
             remove=True,
             detach=False  # Run in foreground, output streams to console
         )
@@ -49,21 +47,27 @@ class KalibrInterface:
 def gather_data(n_frames: int, writer: DictConfig, realsense: DictConfig) -> Path:
     n_frames: int = n_frames
     writer = KalibrWriter(**writer)
+    with RealSenseInterface(**realsense) as rs_interface:
+        counts = defaultdict(int)
+        start_time = time.time()
 
-    counts = defaultdict(int)
+        def on_receive_frame(capture_idx, color, color_tmstmp, depth, depth_tmstmp):
+            writer.write_capture_frame(capture_idx, color_tmstmp, color)
+            counts[capture_idx] += 1
 
-    def on_receive_frame(cap_idx, color, color_tmstmp, depth, depth_tmstmp):
-        writer.write_capture_frame(cap_idx, color_tmstmp, color)
-        counts[cap_idx] += 1
+        rs_interface.start_capture(on_receive_frame)
 
-
-    rs_interface = RealSenseInterface(**realsense, frame_callback=on_receive_frame)
-    for i in range(rs_interface.n_cameras):
-        counts[i] = 0
-    while any([c < n_frames for c in counts.values()]):
-        time.sleep(5.0)
-        print("Progress:", np.array(list(counts.values())) / n_frames)
-    writer.flush()
+        for i in range(rs_interface.n_cameras):
+            counts[i] = 0
+        while any([c < n_frames for c in counts.values()]):
+            time.sleep(5.0)
+            capture_frame_counts = np.array(list(counts.values()))
+            print("Progress:", capture_frame_counts / n_frames)
+            current_time = time.time()
+            seconds_capturing = current_time - start_time
+            capture_fps = capture_frame_counts / seconds_capturing
+            print("Average fps:", capture_fps)
+        writer.flush()
     return writer.path
 
 
