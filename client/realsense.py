@@ -1,11 +1,26 @@
+import os
+import tempfile
 import threading
 import traceback
 from collections import defaultdict
 from typing import Callable, List
 
 import numpy as np
-from client.record import start_pipeline, enumerate_devices, get_tmstmp
 import pyrealsense2 as rs
+
+def enumerate_devices():
+    ctx = rs.context()
+    devs = []
+    for d in ctx.query_devices():
+        serial = d.get_info(rs.camera_info.serial_number)
+        product = d.get_info(rs.camera_info.product_line)
+        devs.append((serial, product))
+    return devs
+
+
+
+def get_tmstmp(frame):
+    return frame.get_frame_metadata(rs.frame_metadata_value.backend_timestamp)
 
 
 class RealSenseInterface:
@@ -20,12 +35,9 @@ class RealSenseInterface:
         def run(self):
             while not self.stop_event.is_set():
                 try:
+                    # config results in these being written to bagfile in /dev/shm
                     fs = self.pipe.wait_for_frames(timeout_ms=5000)
-                    print("worked")
-                    self.callback(
-                        self.idx,
-                        fs
-                    )
+                    self.callback(self.idx)
                 except Exception as e:
                     print(f"Camera {self.idx} failed to grab frame: {e}")
                     traceback.print_exc()
@@ -42,19 +54,16 @@ class RealSenseInterface:
         self._width = width
         self._height = height
         self._fps = fps
-        self._aligner = rs.align(rs.stream.color)
-        self._pipelines: List = self._initialize_cameras()
+        self._pipelines, self._recording_bagpaths = self._initialize_cameras()
         self._stop_events = []
         self._threads = []
         self.frame_counts = defaultdict(int)
-        self._frame_streams = defaultdict(list)
 
     def start_capture(self, on_receive_frame: Callable = None):
-        def _callback_wrapper(cap_idx, fs):
+        def _callback_wrapper(cap_idx):
             if on_receive_frame is not None:
                 on_receive_frame(cap_idx)
             self.frame_counts[cap_idx] += 1
-            self._frame_streams[cap_idx].append(fs)
             if self.frame_counts[cap_idx] >= self._n_frames:
                 self.stop_capture(cap_idx)
 
@@ -64,6 +73,23 @@ class RealSenseInterface:
             t.start()
             self._threads.append(t)
             self._stop_events.append(stop_event)
+            self._savers.append(rs.save_single_frameset())
+
+    def start_pipeline(self, serial: str, w: int, h: int, fps: int):
+        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".bag", dir="/dev/shm")
+        os.close(tmp_fd)
+
+        cfg = rs.config()
+        cfg.enable_device(serial)
+        cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
+        cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
+
+        cfg.enable_record_to_file(tmp_path)
+
+        pipe = rs.pipeline()
+        pipe.start(cfg)
+
+        return pipe, tmp_path
 
     def _initialize_cameras(self):
         cameras = enumerate_devices()
@@ -76,10 +102,12 @@ class RealSenseInterface:
             print(f"   Camera {idx}: {serial}  ({product})")
 
         pipelines = []
+        bagpaths = []
         for serial, _ in cameras:
-            pipe = start_pipeline(serial, self._width, self._height, self._fps)
+            pipe, bagpath = self.start_pipeline(serial, self._width, self._height, self._fps)
             pipelines.append(pipe)
-        return pipelines
+            bagpaths.append(bagpath)
+        return pipelines, bagpaths
 
     def stop_capture(self, capture_idx: int):
         self._stop_events[capture_idx].set()
@@ -93,15 +121,28 @@ class RealSenseInterface:
 
 
     def process_frames(self, capture_idx: int):
-        for fs in self._frame_streams[capture_idx]:
-            aligned_fs = self._aligner.process(fs)
-            col_frame = aligned_fs.get_color_frame()
-            dep_frame = aligned_fs.get_depth_frame()
-            color = np.asanyarray(col_frame.get_data())
-            depth = np.asanyarray(dep_frame.get_data())
-            col_tmstmp = get_tmstmp(color)
-            dep_tmstmp = get_tmstmp(depth)
-            yield color, col_tmstmp, depth, dep_tmstmp
+        pipeline = rs.pipeline()
+        config = rs.config()
+        bag_path = self._recording_bagpaths[capture_idx]
+        config.enable_device_from_file(bag_path, repeat_playback=False)
+        pipeline.start(config)
+        align = rs.align(rs.stream.color)
+
+        try:
+            while True:
+                fs = pipeline.wait_for_frames()
+                aligned_fs = align.process(fs)
+                col_frame = aligned_fs.get_color_frame()
+                dep_frame = aligned_fs.get_depth_frame()
+                color = np.asanyarray(col_frame.get_data())
+                depth = np.asanyarray(dep_frame.get_data())
+                col_tmstmp = get_tmstmp(color)
+                dep_tmstmp = get_tmstmp(depth)
+                yield color, col_tmstmp, depth, dep_tmstmp
+        except:
+            pass
+        finally:
+            pipeline.stop()
 
 
     def __enter__(self):
@@ -109,3 +150,5 @@ class RealSenseInterface:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop_all_captures()
+        for path in self._recording_bagpaths:
+            os.remove(path)

@@ -23,28 +23,4 @@ rosrun kalibr kalibr_calibrate_cameras \
     --topics /cam0/image_raw /cam1/image_raw /cam2/image_raw /cam3/image_raw --dont-show-report
 
 """
-import time
-import pyrealsense2 as rs
 
-
-def enumerate_devices():
-    ctx = rs.context()
-    devs = []
-    for d in ctx.query_devices():
-        serial = d.get_info(rs.camera_info.serial_number)
-        product = d.get_info(rs.camera_info.product_line)
-        devs.append((serial, product))
-    return devs
-
-def start_pipeline(serial: str, w: int, h: int, fps: int):
-    cfg = rs.config()
-    cfg.enable_device(serial)
-    cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
-    cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
-    pipe = rs.pipeline()
-    pipe.start(cfg)
-    return pipe
-
-
-def get_tmstmp(frame):
-    return frame.get_frame_metadata(rs.frame_metadata_value.backend_timestamp)
