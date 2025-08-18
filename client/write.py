@@ -156,6 +156,6 @@ class ACMEWriter:
             self._root[k][self._captures[0].highest_written_index] = v
 
     def flush(self):
-        # Only captures require flushing at the end of the collection
+        # We write state on the fly, only captures require flushing at the end of the collection
         for cap in self._captures:
             cap.flush()

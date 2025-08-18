@@ -58,11 +58,8 @@ def main(cfg: DictConfig):
         episode_writer = ACMEWriter(**cfg.writer)
         nuc.reset()
         stop_control, get_action = start_control_loop(gello, nuc)
-        counts = defaultdict(int)
 
-        def on_receive_frame(capture_idx, color, color_tmstmp, depth, depth_tmstmp):
-            episode_writer.write_capture_frame(capture_idx, color_tmstmp, color, depth)
-            counts[capture_idx] += 1
+        def on_receive_frame(capture_idx):
             if capture_idx == 0:
                 state = nuc.get_robot_state()
                 # for episode collection we just assume all cameras are synchronized to cam0,
@@ -71,14 +68,17 @@ def main(cfg: DictConfig):
                 episode_writer.write_state(timestamp=color_tmstmp, action=get_action(), **state)
 
         rs_interface.start_capture(on_receive_frame)
-
         for i in range(rs_interface.n_cameras):
-            counts[i] = 0
-        while any([c < cfg.max_episode_timesteps for c in counts.values()]):
+            rs_interface.frame_counts[i] = 0
+        while any([c < cfg.max_episode_timesteps for c in rs_interface.frame_counts.values()]):
             time.sleep(2.0)
-            print("Episode progress:", np.array(list(counts.values())) / cfg.max_episode_timesteps)
+            print("Episode progress:", np.array(list(rs_interface.frame_counts.values())) / cfg.max_episode_timesteps)
+
         stop_control()
-        rs_interface.stop_all_captures()
+        for cap_idx in range(rs_interface.n_cameras):
+            m = f"processing capture {cap_idx}"
+            for color, color_tmstmp, depth, depth_tmstmp in tqdm(rs_interface.process_frames(cap_idx), m):
+                episode_writer.write_capture_frame(cap_idx, color_tmstmp, color, depth)
         episode_writer.flush()
 
 

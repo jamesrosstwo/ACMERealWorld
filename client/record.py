@@ -42,10 +42,8 @@ def start_pipeline(serial: str, w: int, h: int, fps: int):
     cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
     cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
     pipe = rs.pipeline()
-    align = rs.align(rs.stream.color)
-    start_time = time.time()  # Record global time at pipeline start
     pipe.start(cfg)
-    return pipe, align, start_time
+    return pipe
 
 
 def get_tmstmp(frame):

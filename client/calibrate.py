@@ -48,25 +48,21 @@ def gather_data(n_frames: int, writer: DictConfig, realsense: DictConfig) -> Pat
     n_frames: int = n_frames
     writer = KalibrWriter(**writer)
     with RealSenseInterface(**realsense) as rs_interface:
-        counts = defaultdict(int)
         start_time = time.time()
-
-        def on_receive_frame(capture_idx, color, color_tmstmp, depth, depth_tmstmp):
-            writer.write_capture_frame(capture_idx, color_tmstmp, color)
-            counts[capture_idx] += 1
-
-        rs_interface.start_capture(on_receive_frame)
-
-        for i in range(rs_interface.n_cameras):
-            counts[i] = 0
-        while any([c < n_frames for c in counts.values()]):
+        rs_interface.start_capture()
+        while any([c < n_frames for c in rs_interface.frame_counts.values()]):
             time.sleep(5.0)
-            capture_frame_counts = np.array(list(counts.values()))
+            capture_frame_counts = np.array(list(rs_interface.frame_counts.values()))
             print("Progress:", capture_frame_counts / n_frames)
             current_time = time.time()
             seconds_capturing = current_time - start_time
             capture_fps = capture_frame_counts / seconds_capturing
             print("Average fps:", capture_fps)
+
+        for cap_idx in range(rs_interface.n_cameras):
+            m = f"processing capture {cap_idx}"
+            for color, color_tmstmp, depth, depth_tmstmp in tqdm(rs_interface.process_frames(cap_idx), m):
+                writer.write_capture_frame(cap_idx, color_tmstmp, color)
         writer.flush()
     return writer.path
 
@@ -75,6 +71,7 @@ def gather_data(n_frames: int, writer: DictConfig, realsense: DictConfig) -> Pat
 def main(cfg: DictConfig):
     calibration_episode_path = gather_data(cfg.n_frames, cfg.writer, cfg.realsense)
     KalibrInterface().run_calibration(calibration_episode_path)
+
 
 if __name__ == "__main__":
     main()
