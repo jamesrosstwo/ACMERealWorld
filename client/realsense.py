@@ -1,6 +1,7 @@
 import os
 import tempfile
 import threading
+import time
 import traceback
 from collections import defaultdict
 from typing import Callable, List
@@ -73,7 +74,6 @@ class RealSenseInterface:
             t.start()
             self._threads.append(t)
             self._stop_events.append(stop_event)
-            self._savers.append(rs.save_single_frameset())
 
     def start_pipeline(self, serial: str, w: int, h: int, fps: int):
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".bag", dir="/dev/shm")
@@ -107,6 +107,9 @@ class RealSenseInterface:
             pipe, bagpath = self.start_pipeline(serial, self._width, self._height, self._fps)
             pipelines.append(pipe)
             bagpaths.append(bagpath)
+            
+        print("Waiting for cameras to start..")
+        time.sleep(2.0)
         return pipelines, bagpaths
 
     def stop_capture(self, capture_idx: int):
@@ -136,10 +139,10 @@ class RealSenseInterface:
                 dep_frame = aligned_fs.get_depth_frame()
                 color = np.asanyarray(col_frame.get_data())
                 depth = np.asanyarray(dep_frame.get_data())
-                col_tmstmp = get_tmstmp(color)
-                dep_tmstmp = get_tmstmp(depth)
+                col_tmstmp = get_tmstmp(col_frame)
+                dep_tmstmp = get_tmstmp(dep_frame)
                 yield color, col_tmstmp, depth, dep_tmstmp
-        except:
+        except RuntimeError:
             pass
         finally:
             pipeline.stop()
