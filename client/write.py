@@ -17,10 +17,12 @@ class KalibrWriter:
             self._frame_width = frame_width
             self._frame_height = frame_height
             self._highest_seen_index = 0
-            self._grayscale_cache = np.zeros((max_episode_len * 2, self._frame_height, self._frame_width), dtype=np.uint8)
-            self._timestamps = np.zeros((max_episode_len * 2,), dtype=np.uint64)
+            self._grayscale_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint8)
+            self._timestamps = np.zeros((max_episode_len,), dtype=np.uint64)
 
         def write_frame(self, timestamp, color):
+            if self._highest_seen_index >= self._max_episode_len:
+                raise IndexError
             self._grayscale_cache[self._highest_seen_index] = cv2.cvtColor(color, cv2.COLOR_RGB2GRAY)
             self._timestamps[self._highest_seen_index] = timestamp
             self._highest_seen_index = self._highest_seen_index + 1
@@ -61,7 +63,10 @@ class KalibrWriter:
         return cap_writers
 
     def write_capture_frame(self, cap_idx, timestamp, rgb):
-        self._captures[cap_idx].write_frame(timestamp, rgb)
+        try:
+            self._captures[cap_idx].write_frame(timestamp, rgb)
+        except IndexError:
+            pass
 
     def flush(self):
         # Only captures require flushing at the end of the collection
@@ -72,7 +77,7 @@ class KalibrWriter:
 
 class ACMEWriter:
     class _CaptureWriter:
-        def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int, fps: int):
+        def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int, fps: int, save_interval: int=1):
             self._path = path
             self._max_episode_len = max_episode_len
             self._frame_width = frame_width
@@ -84,10 +89,11 @@ class ACMEWriter:
             self._depth_store = zarr.DirectoryStore(str(self._path / "depth.zarr"))
             self._depth_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint16)
             self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width, 3), dtype=np.uint8)
+            self._save_interval=1
 
         def write_frame(self, color, depth):
-            # self._rgb_cache[self.highest_written_index] = color
-            # self._depth_cache[self.highest_written_index] = depth
+            self._rgb_cache[self.highest_written_index] = color
+            self._depth_cache[self.highest_written_index] = depth
             self.highest_written_index += 1
 
         def flush(self):

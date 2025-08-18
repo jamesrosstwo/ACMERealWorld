@@ -18,11 +18,8 @@ def enumerate_devices():
         devs.append((serial, product))
     return devs
 
-
-
 def get_tmstmp(frame):
     return frame.get_frame_metadata(rs.frame_metadata_value.backend_timestamp)
-
 
 class RealSenseInterface:
     class _FrameGrabberThread(threading.Thread):
