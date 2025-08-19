@@ -19,15 +19,16 @@ def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
     nuc.start()
 
     stop_event = threading.Event()
-    joint_lock = threading.Lock()
-    latest_joint_angles = None
+    pose_lock = threading.Lock()
+    latest_eef_pos, latest_eef_rot = None, None
 
     def _loop_iter():
-        nonlocal latest_joint_angles
-        joint_angles = gello.get_joint_angles()
-        with joint_lock:
-            latest_joint_angles = joint_angles.copy()
-        nuc.send_control(joint_angles[:7], joint_angles[7:])
+        nonlocal latest_eef_pos, latest_eef_rot
+        eef_pos, eef_rot = gello.get_eef_pose()
+        with pose_lock:
+            latest_eef_pos = eef_pos
+            latest_eef_rot = eef_rot
+        nuc.send_control(eef_pos, eef_rot, None)
 
     def _loop_runner():
         while not stop_event.is_set():
@@ -40,11 +41,11 @@ def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
         stop_event.set()
         loop_thread.join()
 
-    def get_latest_joint_angles():
-        with joint_lock:
-            return None if latest_joint_angles is None else latest_joint_angles.copy()
+    def get_latest_eef_pos():
+        with pose_lock:
+            return None, None if latest_eef_pos is None else latest_eef_pos.copy(), latest_eef_rot.copy()
 
-    return stop_loop, get_latest_joint_angles
+    return stop_loop, get_latest_eef_pos
 
 
 @hydra.main(config_path="config", config_name="collect")
@@ -57,7 +58,10 @@ def main(cfg: DictConfig):
     while True:
         episode_writer = ACMEWriter(**cfg.writer)
         nuc.reset()
-        stop_control, get_action = start_control_loop(gello, nuc)
+        stop_control, get_desired_eef_pose = start_control_loop(gello, nuc)
+
+        def get_action():
+            return np.concatenate(get_desired_eef_pose())
 
         def on_receive_frame(capture_idx):
             if capture_idx == 0:

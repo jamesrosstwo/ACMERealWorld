@@ -4,6 +4,8 @@ from typing import Tuple, List
 import numpy as np
 
 from gello.dynamixel.driver import DynamixelDriver
+from polymetis import FrankaArm
+
 
 @dataclass
 class _GelloArgs:
@@ -49,6 +51,7 @@ class GELLOInterface:
         self._joint_signs = np.array(joint_signs)
         self._joint_adjustment = np.zeros(7)
         self._eef_pos_adjustment = np.zeros(3)
+        self._reference_robot = FrankaArm() # Assuming this GELLO is modeled after a franka.
 
     def _get_joints(self):
         return (self._joint_signs * self._driver.get_joints()[:7])
@@ -56,6 +59,8 @@ class GELLOInterface:
     def get_joint_angles(self):
         return self._get_joints() + self._joint_adjustment
 
+    def get_eef_pose(self):
+        return self._reference_robot.get_ee_pose(self.get_joint_angles())
 
     def zero_controls(self, qpos):
         self._joint_adjustment = qpos - self._get_joints()

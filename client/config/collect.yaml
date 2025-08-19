@@ -6,6 +6,8 @@ nuc:
   server:
     ip: ${nuc.ip}
     port: 22
+    robot_port: 50051
+    gripper_port: 50052
     user: ${env:NUC_USER}
     pwd: ${env:NUC_PWD}
     conda: "/home/james/anaconda3"
