@@ -1,20 +1,20 @@
-n_frames: 1000
+n_frames: 3000
 realsense:
   n_frames: ${n_frames}
-  width: 1280
-  height: 720
-  fps: 30
+  width: 1920
+  height: 1080
+  fps: 6
 
 writer:
   episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/outputs/calibration"
   target:
-    target_type: 'checkerboard'
-    targetCols: 8
-    targetRows: 4
-    rowSpacingMeters: 0.04      #size of one chessboard square [m]
-    colSpacingMeters: 0.04      #size of one chessboard square [m]
+    target_type: 'aprilgrid'
+    tagCols: 6
+    tagRows: 6
+    tagSize: 0.1      #size of one chessboard square [m]
+    tagSpacing: 0.2      #size of one chessboard square [m]
   max_episode_len: ${n_frames}
-  n_cameras: 4
+  n_cameras: 5
   captures:
     frame_width: ${realsense.width}
     frame_height: ${realsense.height}

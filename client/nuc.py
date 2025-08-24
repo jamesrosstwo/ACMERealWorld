@@ -2,6 +2,7 @@ import os
 import threading
 import time
 
+import numpy as np
 import torch
 from omegaconf import DictConfig
 from polymetis import RobotInterface, GripperInterface
@@ -53,6 +54,7 @@ class NUCInterface:
         self._robot = RobotInterface(
             ip_address=self._nuc_ip,
         )
+
         self._gripper = GripperInterface(
             ip_address=self._nuc_ip,
             port=self._server_cfg.gripper_port
@@ -67,16 +69,19 @@ class NUCInterface:
         state = dict(qpos=qpos, qvel=qvel, ee_pos=ee_pos, ee_rot=ee_rot, gripper_force=torch.zeros(1))
         return {k: v.detach().cpu().numpy() for k, v in state.items()}
 
-    def forward_kinematics(self, joint_positions):
-        return self._robot.robot_model.forward_kinematics(joint_positions)
+    def forward_kinematics(self, joint_positions: torch.Tensor):
+        return tuple([x.cpu().numpy() for x in self._robot.robot_model.forward_kinematics(joint_positions)])
 
     def send_control(self, eef_pos, eef_rot, gripper_pos):
         # self._robot.update_desired_joint_positions(torch.tensor(joint_angles))
-        self._robot.update_desired_ee_pose(eef_pos, eef_rot)
+        self._robot.update_desired_ee_pose(torch.tensor(eef_pos), torch.tensor(eef_rot))
 
     def reset(self):
         self._robot.go_home()
-        # self._gripper.goto(width=0, speed=0.05, force=0.1)
+
+        # PUSH T FREEZES
+        self._robot.move_to_ee_pose(torch.tensor([0.5, 0, 0.3]))
+        # self._gripper.goto(width=0, speed=0.05, force=0.2)
 
     def start(self):
         self._robot.start_joint_impedance(self._robot.Kq_default / 10, self._robot.Kqd_default / 10)

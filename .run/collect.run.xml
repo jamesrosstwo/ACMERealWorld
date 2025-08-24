@@ -9,6 +9,7 @@
       <env name="NUC_PWD" value="james" />
       <env name="NUC_USER" value="james" />
       <env name="RS_LOG_FILE" value="$USER_HOME$/realsense.log" />
+      <env name="CONDA_PREFIX" value="$USER_HOME$/anaconda3/envs/ACMECollection" />
     </envs>
     <option name="SDK_HOME" value="" />
     <option name="SDK_NAME" value="ACMECollection" />

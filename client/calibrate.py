@@ -59,10 +59,15 @@ def gather_data(n_frames: int, writer: DictConfig, realsense: DictConfig) -> Pat
             capture_fps = capture_frame_counts / seconds_capturing
             print("Average fps:", capture_fps)
 
+        time.sleep(5.0)
+
         for cap_idx in range(rs_interface.n_cameras):
             m = f"processing capture {cap_idx}"
             for color, color_tmstmp, depth, depth_tmstmp in tqdm(rs_interface.process_frames(cap_idx), m):
-                writer.write_capture_frame(cap_idx, color_tmstmp, color)
+                try:
+                    writer.write_capture_frame(cap_idx, color_tmstmp, color)
+                except IndexError:
+                    break
         writer.flush()
     return writer.path
 

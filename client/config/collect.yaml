@@ -1,4 +1,4 @@
-max_episode_timesteps: 250
+max_episode_timesteps: 100
 
 nuc:
   ip: "192.168.1.106"
@@ -21,7 +21,7 @@ realsense:
 writer:
   episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/output/episodes"
   max_episode_len: ${max_episode_timesteps}
-  n_cameras: 4
+  n_cameras: 5
   captures:
 
     frame_width: ${realsense.width}
@@ -39,7 +39,7 @@ gello:
     - 1
     - 1
     - 1
-    - 1q
+    - -1
     - 1
   start_joints:
     - 0

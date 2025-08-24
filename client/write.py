@@ -63,10 +63,7 @@ class KalibrWriter:
         return cap_writers
 
     def write_capture_frame(self, cap_idx, timestamp, rgb):
-        try:
-            self._captures[cap_idx].write_frame(timestamp, rgb)
-        except IndexError:
-            pass
+        self._captures[cap_idx].write_frame(timestamp, rgb)
 
     def flush(self):
         # Only captures require flushing at the end of the collection
@@ -92,6 +89,8 @@ class ACMEWriter:
             self._save_interval=1
 
         def write_frame(self, color, depth):
+            if self.highest_written_index >= self._max_episode_len:
+                raise IndexError
             self._rgb_cache[self.highest_written_index] = color
             self._depth_cache[self.highest_written_index] = depth
             self.highest_written_index += 1
@@ -124,6 +123,10 @@ class ACMEWriter:
         self._n_cameras = n_cameras
         self._max_episode_len = max_episode_len
         self._captures: List = self._init_captures(captures)
+
+    @property
+    def episode_path(self):
+        return self._path
 
     def _init_captures(self, captures: DictConfig):
         capture_path_base = self._path / "captures"
