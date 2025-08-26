@@ -15,7 +15,7 @@ def gather_data(episodes_path: str, n_frames: int, writer_cfg: DictConfig, reals
 
     ep_paths = sorted(base_episodes_path.iterdir(), key=lambda p: int(p.stem.split("_")[-1]))
     for ep_path in tqdm(ep_paths, "Postprocessing episodes"):
-        completion_marker = ep_path / "COMPLETED"
+        completion_marker = ep_path / "COMPLETE"
         if completion_marker.exists():
             print(f"Skipping {ep_path}: already postprocessed")
             continue

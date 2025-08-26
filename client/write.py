@@ -210,7 +210,7 @@ class ACMEWriter:
 
             # rgb
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            rgb_out = cv2.VideoWriter(str(cap._rgb_path), fourcc, self._fps,
+            rgb_out = cv2.VideoWriter(str(cap._rgb_path), fourcc, cap._fps,
                                       (int(cap._frame_width), int(cap._frame_height)), True)
             for frame in rgb_frames:
                 rgb_out.write(frame)
@@ -222,7 +222,7 @@ class ACMEWriter:
                                     color=[c for c, _ in synced_timestamps],
                                     depth=[d for _, d in synced_timestamps])
 
-        state = zarr.open_group(str(self._captures[0]._path / "episode.zarr"), mode="r+")
+        state = zarr.open_group(str(self.path / "episode.zarr"), mode="r+")
         orig_len = len(next(iter(state.values())))
         if orig_len != sync_len:
             orig_idx = np.linspace(0, 1, orig_len)
@@ -244,4 +244,4 @@ class ACMEWriter:
         )
         with open(self.episode_path / "metadata.yaml", "w") as f:
             yaml.dump(metadata, f)
-        shutil.copy(str(self.calibration_path), self.episode_path / "cameras.yaml")
+        shutil.copy(str(self.calibration_path), self.episode_path / "params.yaml")
