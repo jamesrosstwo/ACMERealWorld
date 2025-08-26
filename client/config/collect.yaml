@@ -22,8 +22,9 @@ realsense:
 writer:
   max_episode_len: ${max_episode_timesteps}
   n_cameras: 5
+  instruction: "Push the green T shape into the black outline of the T shape on the table"
+  calibration_path: "C:\Users\User\Desktop\ACMERealWorld\outputs\calib.yaml"
   captures:
-
     frame_width: ${realsense.width}
     frame_height: ${realsense.height}
     max_episode_len: ${writer.max_episode_len}

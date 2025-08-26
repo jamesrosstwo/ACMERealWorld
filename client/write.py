@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 from typing import List, Dict
 
@@ -35,7 +36,8 @@ class KalibrWriter:
                 out_path = self._path / f"{timestamp_us}.png"
                 cv2.imwrite(str(out_path), rgb_frame)
 
-    def __init__(self, episodes_path: str, target: DictConfig, max_episode_len: int, n_cameras: int, captures: DictConfig):
+    def __init__(self, episodes_path: str, target: DictConfig, max_episode_len: int, n_cameras: int,
+                 captures: DictConfig):
         self._base_episodes_path = Path(episodes_path)
         self._base_episodes_path.mkdir(exist_ok=True, parents=True)
 
@@ -75,7 +77,8 @@ class KalibrWriter:
 
 class ACMEWriter:
     class _CaptureWriter:
-        def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int, fps: int, save_interval: int=1):
+        def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int, fps: int,
+                     save_interval: int = 1):
             self._path = path
             self._max_episode_len = max_episode_len
             self._frame_width = frame_width
@@ -86,38 +89,26 @@ class ACMEWriter:
             self._fps = fps
             self._depth_store = zarr.DirectoryStore(str(self._path / "depth.zarr"))
             self._depth_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint16)
-            self._col_tmstmps = np.zeros((max_episode_len,))
-            self._depth_tmstmps = np.zeros((max_episode_len,))
+            self.col_tmstmps = np.zeros((max_episode_len,))
+            self.depth_tmstmps = np.zeros((max_episode_len,))
             self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width, 3), dtype=np.uint8)
-            self._save_interval=1
+            self._save_interval = 1
 
         def write_frame(self, color, col_tmstmp, depth, depth_tmstmp):
             if self.highest_written_index >= self._max_episode_len:
                 raise IndexError
             self._rgb_cache[self.highest_written_index] = color
             self._depth_cache[self.highest_written_index] = depth
-            self._col_tmstmps[self.highest_written_index] = col_tmstmp
-            self._depth_tmstmps[self.highest_written_index] = depth_tmstmp
+            self.col_tmstmps[self.highest_written_index] = col_tmstmp
+            self.depth_tmstmps[self.highest_written_index] = depth_tmstmp
             self.highest_written_index += 1
 
-        def flush(self):
-            depth_arr = zarr.array(self._depth_cache[:self.highest_written_index],
-                                   chunks=(16, None, None),
-                                   dtype=np.int16,
-                                   store=self._depth_store)
-            rgb_data = self._rgb_cache[:self.highest_written_index]
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-            rgb_out = cv2.VideoWriter(str(self._rgb_path), fourcc, self._fps,
-                                      (int(self._frame_width), int(self._frame_height)), True)
-            with open(str(self._path / "timestamps.npz"), "wb") as f:
-                np.savez_compressed(f, depth=self._depth_tmstmps, color=self._col_tmstmps)
-            for rgb_frame in rgb_data:
-                rgb_out.write(rgb_frame)
-            rgb_out.release()
-
-    def __init__(self, path: Path, max_episode_len: int, n_cameras: int, captures: DictConfig):
+    def __init__(self, path: Path, max_episode_len: int, n_cameras: int, instruction: str, calibration_path: str,
+                 captures: DictConfig):
         self.path = path
         assert self.path.exists()
+        self.instruction = instruction
+        self.calibration_path = calibration_path
         self._store = zarr.DirectoryStore(str(self.path / "episode.zarr"))
         self._root = zarr.group(store=self._store)
         self._n_cameras = n_cameras
@@ -162,9 +153,95 @@ class ACMEWriter:
                         chunks=(self._max_episode_len, *v.shape),
                         dtype=v.dtype,
                     )
-            self._root[k][self._captures[0].highest_written_index] = v
+            self._root[k][self._captures[0].highest_written_index - 1] = v
 
     def flush(self):
         # We write state on the fly, only captures require flushing at the end of the collection
-        for cap in tqdm(self._captures, "Flushing captures"):
-            cap.flush()
+        all_rgb_ts = [c.col_tmstmps[:c.highest_written_index] for c in self._captures]
+        all_depth_ts = [c.depth_tmstmps[:c.highest_written_index] for c in self._captures]
+
+        t0 = max(
+            max(ts[0] for ts in all_rgb_ts),
+            max(ts[0] for ts in all_depth_ts)
+        )
+        t1 = min(
+            min(ts[-1] for ts in all_rgb_ts),
+            min(ts[-1] for ts in all_depth_ts)
+        )
+
+        ref_ts = all_rgb_ts[0]
+        ref_ts = ref_ts[(ref_ts >= t0) & (ref_ts <= t1)]
+        sync_len = len(ref_ts)
+
+        global_synced = []
+        for cap in self._captures:
+            depth_frames = cap._depth_cache[:cap.highest_written_index]
+            rgb_frames = cap._rgb_cache[:cap.highest_written_index]
+            depth_ts = cap.depth_tmstmps[:cap.highest_written_index]
+            rgb_ts = cap.col_tmstmps[:cap.highest_written_index]
+
+            synced_rgb_frames = []
+            synced_depth_frames = []
+            synced_timestamps = []
+
+            d_idx, r_idx = 0, 0
+            for t in ref_ts:
+                # nearest RGB
+                while (r_idx + 1 < len(rgb_ts) and
+                       abs(rgb_ts[r_idx + 1] - t) < abs(rgb_ts[r_idx] - t)):
+                    r_idx += 1
+                # nearest depth
+                while (d_idx + 1 < len(depth_ts) and
+                       abs(depth_ts[d_idx + 1] - t) < abs(depth_ts[d_idx] - t)):
+                    d_idx += 1
+
+                synced_rgb_frames.append(rgb_frames[r_idx])
+                synced_depth_frames.append(depth_frames[d_idx])
+                synced_timestamps.append((rgb_ts[r_idx], depth_ts[d_idx]))
+
+            global_synced.append((cap, synced_rgb_frames, synced_depth_frames, synced_timestamps))
+
+        for cap, rgb_frames, depth_frames, synced_timestamps in global_synced:
+            # depth
+            zarr.array(np.array(depth_frames, dtype=np.int16),
+                       chunks=(16, None, None),
+                       dtype=np.int16,
+                       store=cap._depth_store)
+
+            # rgb
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            rgb_out = cv2.VideoWriter(str(cap._rgb_path), fourcc, self._fps,
+                                      (int(cap._frame_width), int(cap._frame_height)), True)
+            for frame in rgb_frames:
+                rgb_out.write(frame)
+            rgb_out.release()
+
+            # timestamps
+            with open(str(cap._path / "timestamps.npz"), "wb") as f:
+                np.savez_compressed(f,
+                                    color=[c for c, _ in synced_timestamps],
+                                    depth=[d for _, d in synced_timestamps])
+
+        state = zarr.open_group(str(self._captures[0]._path / "episode.zarr"), mode="r+")
+        orig_len = len(next(iter(state.values())))
+        if orig_len != sync_len:
+            orig_idx = np.linspace(0, 1, orig_len)
+            new_idx = np.linspace(0, 1, sync_len)
+            for key, arr in list(state.items()):
+                data = np.array(arr)
+                if data.ndim == 1:
+                    interp = np.interp(new_idx, orig_idx, data)
+                else:
+                    interp = np.empty((sync_len,) + data.shape[1:], dtype=data.dtype)
+                    for j in range(data.shape[1]):
+                        interp[:, j] = np.interp(new_idx, orig_idx, data[:, j])
+                del state[key]
+                state.create_dataset(key, data=interp)
+
+        metadata = dict(
+            n_timesteps=sync_len,
+            instruction=self.instruction
+        )
+        with open(self.episode_path / "metadata.yaml", "w") as f:
+            yaml.dump(metadata, f)
+        shutil.copy(str(self.calibration_path), self.episode_path / "cameras.yaml")
