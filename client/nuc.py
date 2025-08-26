@@ -84,7 +84,7 @@ class NUCInterface:
         # self._gripper.goto(width=0, speed=0.05, force=0.2)
 
     def start(self):
-        self._robot.start_joint_impedance(self._robot.Kq_default / 10, self._robot.Kqd_default / 10)
+        self._robot.start_cartesian_impedance()
 
     def close(self):
         # self._nuc_client.close()

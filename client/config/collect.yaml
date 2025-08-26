@@ -1,4 +1,5 @@
-max_episode_timesteps: 100
+max_episode_timesteps: 600
+episodes_path: "/mnt/ssd/james/episodes"
 
 nuc:
   ip: "192.168.1.106"
@@ -19,7 +20,6 @@ realsense:
   fps: 15
 
 writer:
-  episodes_path: "/home/rvl_root/Desktop/ACMERealWorld/output/episodes"
   max_episode_len: ${max_episode_timesteps}
   n_cameras: 5
   captures:

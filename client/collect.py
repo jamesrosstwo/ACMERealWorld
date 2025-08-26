@@ -1,13 +1,12 @@
 import shutil
 import traceback
-from collections import defaultdict
 import time
+from pathlib import Path
 
 import hydra
 import numpy as np
 import torch
 from omegaconf import DictConfig
-from tqdm import tqdm
 
 from client.nuc import NUCInterface
 from client.realsense import RealSenseInterface
@@ -15,6 +14,16 @@ from client.teleop import GELLOInterface
 from client.write import ACMEWriter
 import threading
 
+
+def get_latest_ep_path(base_episodes_path: Path, prefix: str):
+    ep_idxs = [int(x.stem.split("_")[-1]) for x in base_episodes_path.iterdir()]
+    ep_idx = 0
+    if len(ep_idxs) > 0:
+        ep_idx = max(ep_idxs) + 1
+    current_episode_name = f"{prefix}_{ep_idx}"
+    ep_path = base_episodes_path / current_episode_name
+    ep_path.mkdir(exist_ok=False)
+    return ep_path
 
 def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
     state = nuc.get_robot_state()
@@ -63,10 +72,14 @@ def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
 def main(cfg: DictConfig):
     nuc = NUCInterface(**cfg.nuc)
     gello = GELLOInterface(**cfg.gello)
+    base_ep_path = Path(cfg.episodes_path)
+    base_ep_path.mkdir(exist_ok=True, parents=True)
     while True:
-        with RealSenseInterface(**cfg.realsense) as rs_interface:
-            try:
-                episode_writer = ACMEWriter(**cfg.writer)
+        try:
+            ep_path = get_latest_ep_path(base_ep_path, prefix="episode")
+            print(f"Recording to {ep_path}")
+            episode_writer = ACMEWriter(ep_path, **cfg.writer)
+            with RealSenseInterface(ep_path, **cfg.realsense) as rs_interface:
                 nuc.reset()
                 stop_control, get_desired_eef_pose = start_control_loop(gello, nuc)
 
@@ -87,27 +100,22 @@ def main(cfg: DictConfig):
                 while any([c < cfg.max_episode_timesteps for c in rs_interface.frame_counts.values()]):
                     time.sleep(2.0)
                     print("Episode progress:", np.array(list(rs_interface.frame_counts.values())) / cfg.max_episode_timesteps)
-                stop_control()
-                time.sleep(5.0)
-                m = f"processing capture"
-                for color, color_tmstmp,depth, depth_tmstmp, cap_idx in tqdm(rs_interface.process_all_frames_parallel(), m):
-                    try:
-                        episode_writer.write_capture_frame(cap_idx, color_tmstmp, color, depth)
-                    except IndexError:
-                        break
-            except Exception as e:
-                print(e)
-                traceback.print_exc()
-            finally:
-                episode_writer.flush()
-                ep_control_msg = "Input 1 to continue to start the next recording, or 0 to delete this recording."
+            stop_control()
+            episode_writer.flush()
+        except Exception as e:
+            print(e)
+            traceback.print_exc()
+        finally:
+            ep_control_msg = "1: Continue and start the next recording\n0: to delete this recording.\nx: Exit"
+            ep_control_cmd = str(input(ep_control_msg))
+            while ep_control_cmd not in ["1", "x"]:
+                if ep_control_cmd == "0":
+                    cmd_confirm = input(f"Input 0 again to confirm deletion of {episode_writer.episode_path}")
+                    if cmd_confirm == "0":
+                        shutil.rmtree(episode_writer.episode_path)
                 ep_control_cmd = str(input(ep_control_msg))
-                while ep_control_cmd != "1":
-                    if ep_control_cmd == "0":
-                        cmd_confirm = input(f"Input 0 again to confirm deletion of {episode_writer.episode_path}")
-                        if cmd_confirm == "0":
-                            shutil.rmtree(episode_writer.episode_path)
-                    ep_control_cmd = str(input(ep_control_msg))
+            if ep_control_cmd == "x":
+                break
 
 
 

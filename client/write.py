@@ -6,6 +6,7 @@ import numpy as np
 import yaml
 import zarr
 from omegaconf import DictConfig, OmegaConf
+from tqdm import tqdm
 
 
 class KalibrWriter:
@@ -85,14 +86,18 @@ class ACMEWriter:
             self._fps = fps
             self._depth_store = zarr.DirectoryStore(str(self._path / "depth.zarr"))
             self._depth_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint16)
+            self._col_tmstmps = np.zeros((max_episode_len,))
+            self._depth_tmstmps = np.zeros((max_episode_len,))
             self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width, 3), dtype=np.uint8)
             self._save_interval=1
 
-        def write_frame(self, color, depth):
+        def write_frame(self, color, col_tmstmp, depth, depth_tmstmp):
             if self.highest_written_index >= self._max_episode_len:
                 raise IndexError
             self._rgb_cache[self.highest_written_index] = color
             self._depth_cache[self.highest_written_index] = depth
+            self._col_tmstmps[self.highest_written_index] = col_tmstmp
+            self._depth_tmstmps[self.highest_written_index] = depth_tmstmp
             self.highest_written_index += 1
 
         def flush(self):
@@ -104,21 +109,16 @@ class ACMEWriter:
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             rgb_out = cv2.VideoWriter(str(self._rgb_path), fourcc, self._fps,
                                       (int(self._frame_width), int(self._frame_height)), True)
+            with open(str(self._path / "timestamps.npz"), "wb") as f:
+                np.savez_compressed(f, depth=self._depth_tmstmps, color=self._col_tmstmps)
             for rgb_frame in rgb_data:
                 rgb_out.write(rgb_frame)
             rgb_out.release()
 
-    def __init__(self, episodes_path: str, max_episode_len: int, n_cameras: int, captures: DictConfig):
-        self._base_episodes_path = Path(episodes_path)
-        self._base_episodes_path.mkdir(exist_ok=True, parents=True)
-        ep_idxs = [int(x.stem.split("_")[-1]) for x in self._base_episodes_path.iterdir()]
-        ep_idx = 0
-        if len(ep_idxs) > 0:
-            ep_idx = max(ep_idxs) + 1
-        current_episode_name = f"episode_{ep_idx}"
-        self._path = self._base_episodes_path / current_episode_name
-        self._path.mkdir(exist_ok=False)
-        self._store = zarr.DirectoryStore(str(self._path / "episode.zarr"))
+    def __init__(self, path: Path, max_episode_len: int, n_cameras: int, captures: DictConfig):
+        self.path = path
+        assert self.path.exists()
+        self._store = zarr.DirectoryStore(str(self.path / "episode.zarr"))
         self._root = zarr.group(store=self._store)
         self._n_cameras = n_cameras
         self._max_episode_len = max_episode_len
@@ -126,10 +126,10 @@ class ACMEWriter:
 
     @property
     def episode_path(self):
-        return self._path
+        return self.path
 
     def _init_captures(self, captures: DictConfig):
-        capture_path_base = self._path / "captures"
+        capture_path_base = self.path / "captures"
         capture_path_base.mkdir()
 
         cap_writers = []
@@ -143,8 +143,8 @@ class ACMEWriter:
         for cap, col, dep in zip(self._captures, colors, depths):
             cap.write_frame(col, dep)
 
-    def write_capture_frame(self, capture_index, timestamp, color, depth):
-        self._captures[capture_index].write_frame(color, depth)
+    def write_capture_frame(self, capture_index, col_tmstmp, depth_tmstmp, color, depth):
+        self._captures[capture_index].write_frame(color, col_tmstmp, depth, depth_tmstmp)
 
     def write_state(self, **state):
         for k, v in state.items():
@@ -166,5 +166,5 @@ class ACMEWriter:
 
     def flush(self):
         # We write state on the fly, only captures require flushing at the end of the collection
-        for cap in self._captures:
+        for cap in tqdm(self._captures, "Flushing captures"):
             cap.flush()
