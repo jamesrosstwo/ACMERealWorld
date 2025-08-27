@@ -174,7 +174,9 @@ class RealSenseInterface:
 
         pipelines = []
         bagpaths = []
-        for serial, _ in cameras:
+        for idx, (serial, _) in enumerate(cameras):
+            if idx not in [1, 4]:
+                continue
             pipe, cfg, bagpath = self.create_pipeline(serial, self._width, self._height, self._fps)
             pipelines.append((pipe, cfg))
             bagpaths.append(bagpath)

@@ -1,0 +1,29 @@
+max_episode_timesteps: 600
+
+policy:
+  rgb_keys: ["rgb_0", "rgb_1"]
+  lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
+  port: 54000
+
+nuc:
+  ip: "192.168.1.106"
+  franka_ip: "192.168.1.107"
+  server:
+    ip: ${nuc.ip}
+    port: 22
+    robot_port: 50051
+    gripper_port: 50052
+    user: ${env:NUC_USER}
+    pwd: ${env:NUC_PWD}
+    conda: "/home/james/anaconda3"
+
+realsense:
+  n_frames: ${max_episode_timesteps}
+  width: 1280
+  height: 720
+  fps: 15
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
