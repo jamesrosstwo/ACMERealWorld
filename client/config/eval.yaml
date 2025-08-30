@@ -3,7 +3,7 @@ max_episode_timesteps: 600
 policy:
   rgb_keys: ["rgb_0", "rgb_1"]
   lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
-  port: 54000
+  port: 54400
 
 nuc:
   ip: "192.168.1.106"
@@ -22,6 +22,9 @@ realsense:
   width: 1280
   height: 720
   fps: 15
+  obs_cams:
+    - 1
+    - 4
 
 hydra:
   output_subdir: null

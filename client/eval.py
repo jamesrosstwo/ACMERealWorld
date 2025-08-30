@@ -3,6 +3,7 @@ import logging
 import shutil
 import traceback
 import time
+from collections import deque
 from pathlib import Path
 from typing import Callable, List, Tuple
 
@@ -13,7 +14,7 @@ import torch
 from omegaconf import DictConfig
 
 from client.nuc import NUCInterface
-from client.realsense import RealSenseInterface
+from client.realsense import RealSenseInterface, enumerate_devices
 from client.teleop import GELLOInterface
 from client.write import ACMEWriter
 import pyrealsense2 as rs
@@ -98,12 +99,13 @@ class PolicyInterface:
 
 class EvalRSI(RealSenseInterface):
     class _FrameGrabberThread(threading.Thread):
-        def __init__(self, idx, pipe, callback, stop_event):
+        def __init__(self, idx, pipe, callback, stop_event, cache_size=2):
             super().__init__()
             self.idx = idx
             self.pipe = pipe
             self.callback = callback
             self.stop_event = stop_event
+            self._cache = deque(maxlen=cache_size)
 
         def run(self):
             while not self.stop_event.is_set():
@@ -111,7 +113,8 @@ class EvalRSI(RealSenseInterface):
                     fs = self.pipe.wait_for_frames(timeout_ms=5000)
                     color_frame = fs.get_color_frame()
                     # Convert frames to numpy arrays
-                    color = np.asanyarray(color_frame.get_data())
+                    color = torch.tensor(np.asanyarray(color_frame.get_data()))
+                    self._cache.append(color)
                     self.callback(self.idx, color)
                 except Exception as e:
                     print(f"Camera {self.idx} failed to grab frame: {e}")
@@ -119,20 +122,46 @@ class EvalRSI(RealSenseInterface):
             print(f"Stopping capture pipeline {self.idx}")
             self.pipe.stop()
 
-    def __init__(self, path: Path, n_frames: int, width: int, height: int, fps: int, init=True):
+        def get_obs(self):
+            return torch.stack(list(self._cache))
+
+    def _initialize_cameras(self):
+        cameras = enumerate_devices()
+        if not cameras:
+            print("No RealSense devices detected – exiting.")
+            return []
+
+        print(f"Found {len(cameras)} camera(s):")
+        for idx, (serial, product) in enumerate(cameras):
+            print(f"   Camera {idx}: {serial}  ({product})")
+
+        pipelines = []
+        bagpaths = []
+        for idx, (serial, _) in enumerate(cameras):
+            if idx not in self._obs_cam_idx:
+                continue
+            pipe, cfg, bagpath = self.create_pipeline(serial, self._width, self._height, self._fps)
+            pipelines.append((pipe, cfg))
+            bagpaths.append(bagpath)
+
+    def __init__(self, path: Path, n_frames: int, width: int, height: int, fps: int, obs_cams: List[int], init=True):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self._path = path
         self._n_frames = n_frames
         self._width = width
         self._height = height
         self._fps = fps
-        self._latest_rgb_frames: Tuple[torch.Tensor, torch.Tensor] = None
+        self._obs_cam_idx = obs_cams
         if init:
             self._pipelines, self._recording_bagpaths = self._initialize_cameras()
             self._stop_events = []
             self._threads = []
             self._start_indices = []
             self.frame_counts = {i: 0 for i in range(len(self._pipelines))}
+
+
+    def get_rgb_obs(self) -> List[torch.Tensor]:
+        return [t.get_obs() for t in self._threads]
 
     def start_capture(self):
         def _callback_wrapper(cap_idx, fs):
@@ -180,7 +209,7 @@ def start_control_loop(policy: PolicyInterface, realsense: EvalRSI, nuc: NUCInte
     def _loop_iter():
         nonlocal latest_eef_pos, latest_eef_rot, pose_lock
 
-        frames: Tuple[torch.Tensor] = realsense.get()
+        frames: List[np.ndarray] = realsense.get_rgb_obs()
         eef_pos, eef_rot = policy(
             rgb_0=frames[0],
             rgb_1=frames[1],
