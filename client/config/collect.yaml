@@ -31,9 +31,9 @@ writer:
     fps: ${realsense.fps}
 
 gello:
-  base_index: 8
+  base_index: 0
   baud_rate: 115200
-  port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTA2U2GH-if00-port0"
+  port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTA2U2FX-if00-port0"
   joint_signs:
     - 1
     - -1

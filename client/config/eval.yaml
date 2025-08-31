@@ -1,9 +1,19 @@
 max_episode_timesteps: 600
+start_index: 0
 
 policy:
+  control_frequency: 2
+  obs_history: 2
   rgb_keys: ["rgb_0", "rgb_1"]
   lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
   port: 54400
+  frame_shape:
+    - 3
+    - 256
+    - 256
+
+writer:
+  max_episode_len: ${max_episode_timesteps}
 
 nuc:
   ip: "192.168.1.106"

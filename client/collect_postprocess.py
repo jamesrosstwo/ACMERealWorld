@@ -15,26 +15,29 @@ def gather_data(episodes_path: str, n_frames: int, writer_cfg: DictConfig, reals
 
     ep_paths = sorted(base_episodes_path.iterdir(), key=lambda p: int(p.stem.split("_")[-1]))
     for ep_path in tqdm(ep_paths, "Postprocessing episodes"):
-        completion_marker = ep_path / "COMPLETE"
-        if completion_marker.exists():
-            print(f"Skipping {ep_path}: already postprocessed")
-            continue
-        print(f"Processing episode {ep_path}")
         try:
-            shutil.rmtree(Path(ep_path / "captures"))
-        except FileNotFoundError:
-            pass
-        writer = ACMEWriter(ep_path, **writer_cfg)
-        bagpaths = list(Path(ep_path).glob("*.bag"))
-        rs_interface =  RSBagProcessor(bagpaths, **realsense)
-        print(f"found {len(bagpaths)} bags")
-        for color, color_tmstmp, depth, depth_tmstmp, cap_idx in tqdm(rs_interface.process_all_frames()):
-            try:
-                writer.write_capture_frame(cap_idx, color_tmstmp, depth_tmstmp, color, depth)
-            except IndexError:
+            completion_marker = ep_path / "COMPLETE"
+            if completion_marker.exists():
+                print(f"Skipping {ep_path}: already postprocessed")
                 continue
-        writer.flush()
-        completion_marker.touch()
+            print(f"Processing episode {ep_path}")
+            try:
+                shutil.rmtree(Path(ep_path / "captures"))
+            except FileNotFoundError:
+                pass
+            writer = ACMEWriter(ep_path, **writer_cfg)
+            bagpaths = list(Path(ep_path).glob("*.bag"))
+            rs_interface =  RSBagProcessor(bagpaths, **realsense)
+            print(f"found {len(bagpaths)} bags")
+            for color, color_tmstmp, depth, depth_tmstmp, cap_idx in tqdm(rs_interface.process_all_frames()):
+                try:
+                    writer.write_capture_frame(cap_idx, color_tmstmp, depth_tmstmp, color, depth)
+                except IndexError:
+                    continue
+            writer.flush()
+            completion_marker.touch()
+        except RuntimeError as e:
+            print(f"bags unindexed for episode {ep_path}")
 
 
 @hydra.main(config_path="config", config_name="collect")
