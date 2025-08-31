@@ -38,57 +38,76 @@ class EvalWriter:
     def episode_path(self):
         return self.path
 
+    import plotly.graph_objects as go
+    import numpy as np
+
     def write_trajectory_plot(self, stacked_states: Dict[str, np.ndarray]):
         plot_path = self.path / "trajectory.html"
-        eef_pos = stacked_states["ee_pos"]
-        action_pos = stacked_states["action"][:3]  # Assuming action is in (x, y, z)
 
-        # Get the range for axis scaling (same for all dimensions)
-        max_range = max(np.ptp(eef_pos[:, 0]), np.ptp(eef_pos[:, 1]), np.ptp(eef_pos[:, 2]))
-        min_val = np.min(eef_pos) - 0.05 * max_range
-        max_val = np.max(eef_pos) + 0.05 * max_range
+        # Extract positions from the stacked states
+        eef_pos = stacked_states["ee_pos"]  # shape: (N, 3)
+        action_pos = stacked_states["action"][:, :3]  # Take only first 3 components, shape: (N, 3)
 
-        # Create a color map for the action positions (black to red)
-        num_points = len(action_pos)
-        colors = [(i / num_points, 0, 0) for i in range(num_points)]  # Fade from black to red
+        # Get bounds for the cube (using the min and max positions of eef_pos and action_pos)
+        min_pos = np.min(np.vstack([eef_pos, action_pos]), axis=0)
+        max_pos = np.max(np.vstack([eef_pos, action_pos]), axis=0)
 
-        # Extract X, Y, Z from eef_pos and action_pos
-        eef_x, eef_y, eef_z = eef_pos[:, 0], eef_pos[:, 1], eef_pos[:, 2]
-        action_x, action_y, action_z = action_pos[0], action_pos[1], action_pos[2]
+        # Calculate the range for each axis
+        range_x = max_pos[0] - min_pos[0]
+        range_y = max_pos[1] - min_pos[1]
+        range_z = max_pos[2] - min_pos[2]
 
-        # Create 3D plot
+        # Ensure that all axes have the same range (so the plot is cubic)
+        max_range = max(range_x, range_y, range_z)
+
+        # Extend the boundaries by 10% in both directions for some padding
+        padding = max_range * 0.1
+        center_pos = (min_pos + max_pos) / 2  # Get the center of the data
+
+        # Coerce the bounds to be a cube centered around the data
+        min_pos = center_pos - max_range / 2 - padding
+        max_pos = center_pos + max_range / 2 + padding
+
+        # Create a 3D plot
         fig = go.Figure()
 
-        # Plot the end effector positions as a 3D line
         fig.add_trace(go.Scatter3d(
-            x=eef_x, y=eef_y, z=eef_z,
-            mode='lines+markers',
-            marker=dict(color='blue', size=2),
+            x=eef_pos[:, 0],
+            y=eef_pos[:, 1],
+            z=eef_pos[:, 2],
+            mode='lines+markers',  # 'lines' for the trajectory, 'markers' for the points
+            name='End-Effector Trajectory',
             line=dict(color='blue', width=4),
-            name='End-Effector Trajectory'
+            marker=dict(size=2, color='blue')
         ))
 
-        # Plot the action positions as a 3D scatter, with colors fading from black to red
+        # Add trace for action positions (action_pos)
         fig.add_trace(go.Scatter3d(
-            x=action_x, y=action_y, z=action_z,
-            mode='markers',
-            marker=dict(size=2, color=[i[0] for i in colors], colorscale='reds', line=dict(color='black', width=2)),
-            name='Action Trajectory'
+            x=action_pos[:, 0],
+            y=action_pos[:, 1],
+            z=action_pos[:, 2],
+            mode='lines+markers',
+            name='Action Trajectory',
+            line=dict(color='red', width=4),
+            marker=dict(size=2, color='red')
         ))
 
-        # Update layout to make it a cube and adjust the axis limits
+        # Update layout for better visualization
         fig.update_layout(
+            title="End-Effector and Action Trajectories",
             scene=dict(
-                xaxis=dict(range=[min_val, max_val], backgroundcolor="white"),
-                yaxis=dict(range=[min_val, max_val], backgroundcolor="white"),
-                zaxis=dict(range=[min_val, max_val], backgroundcolor="white")
+                xaxis_title='X',
+                yaxis_title='Y',
+                zaxis_title='Z',
+                xaxis=dict(range=[min_pos[0], max_pos[0]]),
+                yaxis=dict(range=[min_pos[1], max_pos[1]]),
+                zaxis=dict(range=[min_pos[2], max_pos[2]]),
             ),
-            title="End-Effector Trajectory & Action Positions",
-            showlegend=True
+            margin=dict(l=0, r=0, b=0, t=40),  # Adjust margins for better layout
         )
 
         # Save the plot to an HTML file
-        fig.write_html(str(plot_path))
+        fig.write_html(plot_path)
 
     def flush(self):
         state_hist_path = self.path / f"state_action.npz"
