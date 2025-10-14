@@ -723,3 +723,47 @@
 [2025-08-31 16:16:35,774][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
 [2025-08-31 16:18:38,870][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
 [2025-08-31 16:31:39,803][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-08-31 19:20:32,701][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-08-31 19:53:19,162][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-08-31 19:59:41,963][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-09-08 19:09:52,212][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:10:21,620][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:10:33,966][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-09-08 19:10:56,072][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:11:08,994][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-09-08 19:15:21,137][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:16:16,408][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:21:13,200][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:22:16,838][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:25:12,369][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:26:47,122][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:26:59,448][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:27:23,845][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-09-08 19:27:37,498][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:29:01,823][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:31:16,392][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:33:57,435][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:35:09,910][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:41:43,639][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:42:18,018][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-09-08 19:42:56,888][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:49:03,303][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-08 19:50:04,529][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-09-08 19:50:23,320][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-16 16:41:39,526][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-16 16:41:54,565][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-09-16 16:44:42,045][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-18 13:26:32,520][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-18 13:36:44,428][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-18 13:38:15,368][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-18 13:39:30,060][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 13:51:33,600][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 13:51:50,916][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 13:52:04,247][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 13:52:25,156][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 13:53:14,114][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 13:59:27,211][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 14:00:39,938][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 14:02:36,322][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 14:06:26,273][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-09-30 14:07:07,724][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.

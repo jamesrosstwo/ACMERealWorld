@@ -11,6 +11,9 @@ from typing import Callable, List, Dict
 
 import torch.nn.functional as F
 
+from pathlib import Path
+from PIL import Image
+
 import hydra
 import numpy as np
 import requests
@@ -23,8 +26,6 @@ from client.nuc import NUCInterface
 from client.realsense import RealSenseInterface, enumerate_devices
 import pyrealsense2 as rs
 import threading
-
-
 
 
 class EvalWriter:
@@ -42,13 +43,16 @@ class EvalWriter:
     import numpy as np
 
     def write_trajectory_plot(self, stacked_states: Dict[str, np.ndarray]):
+        import numpy as np
+        import plotly.graph_objects as go
+
         plot_path = self.path / "trajectory.html"
 
         # Extract positions from the stacked states
         eef_pos = stacked_states["ee_pos"]  # shape: (N, 3)
-        action_pos = stacked_states["action"][:, :3]  # Take only first 3 components, shape: (N, 3)
+        action_pos = stacked_states["action"][:, :3]  # shape: (N, 3)
 
-        # Get bounds for the cube (using the min and max positions of eef_pos and action_pos)
+        # Get bounds for the cube
         min_pos = np.min(np.vstack([eef_pos, action_pos]), axis=0)
         max_pos = np.max(np.vstack([eef_pos, action_pos]), axis=0)
 
@@ -56,43 +60,53 @@ class EvalWriter:
         range_x = max_pos[0] - min_pos[0]
         range_y = max_pos[1] - min_pos[1]
         range_z = max_pos[2] - min_pos[2]
-
-        # Ensure that all axes have the same range (so the plot is cubic)
         max_range = max(range_x, range_y, range_z)
 
-        # Extend the boundaries by 10% in both directions for some padding
+        # Add padding
         padding = max_range * 0.1
-        center_pos = (min_pos + max_pos) / 2  # Get the center of the data
-
-        # Coerce the bounds to be a cube centered around the data
+        center_pos = (min_pos + max_pos) / 2
         min_pos = center_pos - max_range / 2 - padding
         max_pos = center_pos + max_range / 2 + padding
 
         # Create a 3D plot
         fig = go.Figure()
 
+        # End-effector trajectory (solid blue)
         fig.add_trace(go.Scatter3d(
             x=eef_pos[:, 0],
             y=eef_pos[:, 1],
             z=eef_pos[:, 2],
-            mode='lines+markers',  # 'lines' for the trajectory, 'markers' for the points
+            mode='lines+markers',
             name='End-Effector Trajectory',
             line=dict(color='blue', width=4),
             marker=dict(size=2, color='blue')
         ))
 
-        # Add trace for action positions (action_pos)
+        # Action trajectory with gradient from black to red
+        num_points = action_pos.shape[0]
+        gradient_values = np.linspace(0, 1, num_points)  # Used for color scaling
+
         fig.add_trace(go.Scatter3d(
             x=action_pos[:, 0],
             y=action_pos[:, 1],
             z=action_pos[:, 2],
             mode='lines+markers',
             name='Action Trajectory',
-            line=dict(color='red', width=4),
-            marker=dict(size=2, color='red')
+            line=dict(
+                color='red',
+                width=4
+            ),
+            marker=dict(
+                size=3,
+                color=gradient_values,  # Gradient value for each point
+                colorscale=[[0, 'black'], [1, 'red']],
+                cmin=0,
+                cmax=1,
+                showscale=False  # Hide the color bar
+            )
         ))
 
-        # Update layout for better visualization
+        # Update layout
         fig.update_layout(
             title="End-Effector and Action Trajectories",
             scene=dict(
@@ -103,10 +117,10 @@ class EvalWriter:
                 yaxis=dict(range=[min_pos[1], max_pos[1]]),
                 zaxis=dict(range=[min_pos[2], max_pos[2]]),
             ),
-            margin=dict(l=0, r=0, b=0, t=40),  # Adjust margins for better layout
+            margin=dict(l=0, r=0, b=0, t=40),
         )
 
-        # Save the plot to an HTML file
+        # Save plot
         fig.write_html(plot_path)
 
     def flush(self):
@@ -116,6 +130,7 @@ class EvalWriter:
         np.savez(state_hist_path, **stacked_states)
         self.write_trajectory_plot(stacked_states)
 
+
 class PolicyInterface:
     """
     Interface for an ACMEPolicy running on some local port
@@ -123,7 +138,8 @@ class PolicyInterface:
 
     def __init__(self, control_frequency: float, obs_history: int, rgb_keys: List[str], lowdim_keys: List[str],
                  frame_shape: List[int],
-                 port: int):
+                 port: int,
+                 delta_actions: bool = False):
         self._control_frequency = control_frequency
         self._obs_history = obs_history
         self._rgb_keys = rgb_keys
@@ -131,6 +147,7 @@ class PolicyInterface:
         self._frame_shape = frame_shape
         self._port = port
         self._server_url = f'http://localhost:{self._port}'
+        self._delta_actions = delta_actions
 
     @property
     def obs_history_size(self):
@@ -140,17 +157,17 @@ class PolicyInterface:
     def control_frequency(self):
         return self._control_frequency
 
-    def coerce_frame_shape(self, frame: torch.Tensor):
+    def preprocess_frame(self, frame: torch.Tensor):
         """
         Resize a batch of image tensors to match self._frame_shape.
 
         Input shape:  (N, H, W, C), dtype: uint8 or float
         Output shape: (N, C, H, W), dtype: uint8
         """
-        target_shape = self._frame_shape  # (N, H, W, C)
+        target_shape = self._frame_shape  # Expected (C, H, W)
 
         assert frame.ndim == 4, f"Expected 4D input (N, H, W, C), got {frame.shape}"
-        assert frame.shape[-1] == 3, "Expected 3 channels (RGB)"
+        assert frame.shape[-1] == 3, "Expected 3 channels (BGR or RGB)"
 
         n, h, w, c = frame.shape
         tc, th, tw = target_shape
@@ -160,6 +177,9 @@ class PolicyInterface:
             frame = frame.float() / 255.0
         else:
             frame = frame.float()
+
+        # BGR → RGB (flip channel 0 and 2)
+        # frame = frame[..., [2, 1, 0]]
 
         # NHWC → NCHW
         frame = frame.permute(0, 3, 1, 2)
@@ -230,10 +250,17 @@ class PolicyInterface:
             )
             resp.raise_for_status()
             result = resp.json()
-            return torch.tensor(result["action"])
+            action_tensor = torch.tensor(result["action"])
+            if self._delta_actions:
+                cumulative = torch.cumsum(action_tensor, dim=1)
+                cumulative[:, :, :3] += eef_pos[:, -1]
+                cumulative[:, :, 3:7] += eef_quat[:, -1]
+                return cumulative
+            return action_tensor
         except Exception as err:
             logging.info(f"Error communicating with the server: {err}")
             raise err
+
 
 class EvalRSI(RealSenseInterface):
     class _FrameGrabberThread(threading.Thread):
@@ -275,7 +302,7 @@ class EvalRSI(RealSenseInterface):
 
         pipelines = []
         for idx, (serial, _) in enumerate(cameras):
-            if idx not in self._obs_cam_idx:
+            if serial not in self._obs_cam_serial:
                 continue
             pipe, cfg = self.create_pipeline(serial, self._width, self._height, self._fps)
             pipelines.append((pipe, cfg))
@@ -287,7 +314,7 @@ class EvalRSI(RealSenseInterface):
         self._width = width
         self._height = height
         self._fps = fps
-        self._obs_cam_idx = obs_cams
+        self._obs_cam_serial = obs_cams
         if init:
             self._pipelines = self._initialize_cameras()
             self._stop_events = []
@@ -322,6 +349,7 @@ class EvalRSI(RealSenseInterface):
         pipe = rs.pipeline()
         return pipe, cfg
 
+
 def get_latest_ep_path(base_episodes_path: Path, prefix: str):
     ep_idxs = [int(x.stem.split("_")[-1]) for x in base_episodes_path.iterdir()]
     ep_idx = 0
@@ -332,6 +360,7 @@ def get_latest_ep_path(base_episodes_path: Path, prefix: str):
     ep_path.mkdir(exist_ok=False)
     return ep_path
 
+
 def listen_for_keypress(cancel_event):
     print("Press 'c' to cancel the episode.")
     while not cancel_event.is_set():
@@ -340,6 +369,7 @@ def listen_for_keypress(cancel_event):
             if key.lower() == 'c':
                 cancel_event.set()
                 print("\nEpisode cancelled by user (keypress 'x').")
+
 
 def start_control_loop(policy: PolicyInterface, realsense: EvalRSI, nuc: NUCInterface, states):
     nuc.start()
@@ -351,10 +381,11 @@ def start_control_loop(policy: PolicyInterface, realsense: EvalRSI, nuc: NUCInte
     def _loop_iter():
         nonlocal desired_eef_pos, desired_eef_rot, pose_lock
         frames: List[torch.Tensor] = realsense.get_rgb_obs()
-        resized_frames = [policy.coerce_frame_shape(f) for f in frames]
+        resized_frames = [policy.preprocess_frame(f) for f in frames]
         current_states = list(states)
         eef_pos = np.stack([s["ee_pos"] for s in current_states[-policy.obs_history_size:]])
         eef_rot = np.stack([s["ee_rot"] for s in current_states[-policy.obs_history_size:]])
+
         action = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
             rgb_1=resized_frames[1].unsqueeze(0),
@@ -396,6 +427,7 @@ def start_control_loop(policy: PolicyInterface, realsense: EvalRSI, nuc: NUCInte
             return desired_eef_pos.copy(), desired_eef_rot.copy()
 
     return stop_loop, get_action
+
 
 @hydra.main(config_path="config", config_name="eval")
 def main(cfg: DictConfig):
@@ -460,9 +492,9 @@ def main(cfg: DictConfig):
             traceback.print_exc()
         finally:
             ep_control_msg = "1: Record Success \n2: Record Failure\n0: Delete this recording.\nx: Exit\nz: Next episode"
-            ep_control_cmd = str(input(ep_control_msg))
+            ep_control_cmd = str(input(ep_control_msg)).strip()
             while ep_control_cmd not in ["x", "z"]:
-                ep_control_cmd = str(input(ep_control_msg))
+                ep_control_cmd = str(input(ep_control_msg)).strip()
                 if ep_control_cmd == "1":
                     successes.append(True)
                 elif ep_control_cmd == "2":
@@ -475,16 +507,20 @@ def main(cfg: DictConfig):
                 elif ep_control_cmd == "z":
                     break
 
-        stats_path = out_path / "stats.yaml"
-        stats_path.unlink(missing_ok=True)
-        stats = dict(
-            n_successes=sum(successes),
-            success_rate=sum(successes) / len(successes),
-            successes=successes,
-        )
+        try:
+            stats_path = out_path / "stats.yaml"
+            stats_path.unlink(missing_ok=True)
+            stats = dict(
+                n_successes=sum(successes),
+                success_rate=sum(successes) / len(successes),
+                successes=successes,
+            )
 
-        with open(stats_path, 'w') as f:
-            yaml.dump(stats, f)
+            with open(stats_path, 'w') as f:
+                yaml.dump(stats, f)
+        except ZeroDivisionError:
+            continue
+
 
 if __name__ == "__main__":
     main()

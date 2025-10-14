@@ -1,15 +1,11 @@
-import shutil
 import threading
 import time
 import traceback
-from pathlib import Path
-from typing import Callable, List
-
-import numpy as np
+from typing import Callable
 import pyrealsense2 as rs
-import multiprocessing as mp
-
-from tqdm import tqdm
+import numpy as np
+from pathlib import Path
+from typing import List
 
 
 def enumerate_devices():
@@ -33,12 +29,6 @@ def enumerate_devices():
 def get_tmstmp(frame):
     return frame.get_frame_metadata(rs.frame_metadata_value.backend_timestamp)
 
-
-
-import pyrealsense2 as rs
-import numpy as np
-from pathlib import Path
-from typing import List
 
 class RSBagProcessor:
     def __init__(self, bag_paths: List[Path], n_frames: int, width: int, height: int, fps: int):
@@ -126,6 +116,7 @@ class RealSenseInterface:
         self._width = width
         self._height = height
         self._fps = fps
+        self._all_intr = []
         if init:
             self._pipelines, self._recording_bagpaths = self._initialize_cameras()
             self._stop_events = []
@@ -133,21 +124,36 @@ class RealSenseInterface:
             self._start_indices = []
             self.frame_counts = {i: 0 for i in range(len(self._pipelines))}
 
+
     def start_capture(self, on_receive_frame: Callable = None):
         def _callback_wrapper(cap_idx):
             if on_receive_frame is not None:
                 on_receive_frame(cap_idx)
             self.frame_counts[cap_idx] += 1
             if self.frame_counts[cap_idx] >= self._n_frames:
+                print("stopping capture", cap_idx)
                 self.stop_capture(cap_idx)
 
         for idx, (pipe, cfg) in enumerate(self._pipelines):
             stop_event = threading.Event()
-            pipe.start(cfg)
+            profile = pipe.start(cfg)
+
+            dep = profile.get_stream(rs.stream.depth)
+            i = dep.as_video_stream_profile().get_intrinsics()
+            print(i.fx, i.fy, i.ppx, i.ppy)
+            self._all_intr.append(np.asarray(i.ppx))
+
+            col_sensor = profile.get_device().query_sensors()[1]
+            col_sensor.set_option(rs.option.exposure, 250)
+            col_sensor.set_option(rs.option.gain, 128)
+            # col_sensor.set_option(rs.option.white_balance, 4000)
             t = self._FrameGrabberThread(idx, pipe, _callback_wrapper, stop_event)
             t.start()
             self._threads.append(t)
             self._stop_events.append(stop_event)
+
+        intrinsics_path = self._path / "intrinsics.npy"
+        np.save(intrinsics_path, np.stack(self._all_intr))
 
     def create_pipeline(self, serial: str, w: int, h: int, fps: int):
         tmp_path = str(self._path / f"{serial}.bag")

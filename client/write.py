@@ -232,13 +232,18 @@ class ACMEWriter:
                 new_idx = np.linspace(0, 1, sync_len)
                 for key, arr in list(state.items()):
                     data = np.array(arr)
+
+                    state.create_dataset(f"{key}_original", data=data)
+                    del state[key]
+
                     if data.ndim == 1:
                         interp = np.interp(new_idx, orig_idx, data)
                     else:
                         interp = np.empty((sync_len,) + data.shape[1:], dtype=data.dtype)
                         for j in range(data.shape[1]):
                             interp[:, j] = np.interp(new_idx, orig_idx, data[:, j])
-                    state.create_dataset(f"{key}_interp", data=interp)
+
+                    state.create_dataset(f"{key}", data=interp)
 
             metadata = dict(
                 n_timesteps=sync_len,
@@ -246,6 +251,7 @@ class ACMEWriter:
             )
             with open(self.episode_path / "metadata.yaml", "w") as f:
                 yaml.dump(metadata, f)
+
             shutil.copy(str(self.calibration_path), self.episode_path / "params.yaml")
         except IndexError:
             pass
