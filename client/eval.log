@@ -156,3 +156,8 @@
 [2025-09-04 17:16:51,386][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-09-04 17:17:03,309][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
 [2025-09-04 17:18:27,227][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 08:21:23,833][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 08:22:35,322][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 08:22:43,167][root][INFO] - Error communicating with the server: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+[2025-10-15 08:25:20,404][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 08:29:07,508][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.

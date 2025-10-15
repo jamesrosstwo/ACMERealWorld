@@ -195,7 +195,7 @@ class PolicyInterface:
 
     def __call__(self,
                  rgb_0: torch.Tensor,
-                 rgb_1: torch.Tensor,
+                 #rgb_1: torch.Tensor,
                  eef_pos: np.ndarray,
                  eef_quat: np.ndarray,
                  gripper_force: np.ndarray) -> torch.Tensor:
@@ -206,7 +206,7 @@ class PolicyInterface:
         data = {}
 
         # Add RGB frames as binary data
-        rgb_data = {"rgb_0": rgb_0, "rgb_1": rgb_1}
+        rgb_data = {"rgb_0": rgb_0}#, "rgb_1": rgb_1}
 
         for rgb_key, frames in rgb_data.items():
             buffer = io.BytesIO()
@@ -388,7 +388,7 @@ def start_control_loop(policy: PolicyInterface, realsense: EvalRSI, nuc: NUCInte
 
         action = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
-            rgb_1=resized_frames[1].unsqueeze(0),
+            # rgb_1=resized_frames[1].unsqueeze(0),
             eef_pos=np.expand_dims(eef_pos, 0),
             eef_quat=np.expand_dims(eef_rot, 0),
             gripper_force=np.zeros((1, policy.obs_history_size, 1))
