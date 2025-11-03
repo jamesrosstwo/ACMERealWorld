@@ -161,3 +161,24 @@
 [2025-10-15 08:22:43,167][root][INFO] - Error communicating with the server: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
 [2025-10-15 08:25:20,404][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-10-15 08:29:07,508][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 09:58:46,278][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 10:01:09,212][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 10:02:01,254][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 10:03:00,167][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 10:04:10,776][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 10:04:19,116][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54400): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x72ce22143580>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-10-15 10:08:59,432][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 10:09:07,794][root][INFO] - Error communicating with the server: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+[2025-10-15 10:10:16,210][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-15 10:10:24,627][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54456): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7234b26de4c0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-10-15 10:13:05,800][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-29 10:31:47,832][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-31 14:06:27,119][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-10-31 14:35:26,725][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54456): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7872274ecb50>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-10-31 14:37:42,374][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54456): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7c6602ecd400>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-10-31 14:42:36,342][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54456): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7cf8db9744f0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-10-31 14:59:46,392][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54456): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x788bee720b20>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-10-31 15:01:41,686][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54455): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70340a276bb0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-10-31 15:03:39,639][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54455): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x75393d4b7430>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-10-31 15:15:40,893][root][INFO] - Error communicating with the server: 500 Server Error: Internal Server Error for url: http://localhost:54139/predict
+[2025-11-03 17:32:27,651][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54139): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x79359e7994c0>: Failed to establish a new connection: [Errno 111] Connection refused'))

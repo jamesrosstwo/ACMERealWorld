@@ -43,10 +43,9 @@ class NUCInterface:
 
         return client
 
-
     @property
     def pusht_home(self):
-        return np.array([0.5, 0, 0.3]), np.array([0.94, 0.335, 0, -0.03])
+        return np.array([0.5, 0, 0.38]), np.array([0.942, 0.336, 0, 0])
 
     def __init__(self, ip: str, server: DictConfig, franka_ip: str):
         self._franka_ip = franka_ip
@@ -94,11 +93,13 @@ class NUCInterface:
         self._robot.update_desired_ee_pose(eef_pos, eef_rot)
 
     def reset(self):
-        self._robot.go_home()
-
+        current_ee_pos, current_ee_rot = self._robot.get_ee_pose()
+        self._robot.move_to_ee_pose(current_ee_pos + torch.tensor([0, 0, 0.15]))
         # PUSH T FREEZES
-        self._robot.move_to_ee_pose(torch.tensor([0.5, 0, 0.3]))
-        # self._gripper.goto(width=0, speed=0.05, force=0.2)
+        self._robot.move_to_ee_pose(*self.pusht_home)
+        # self._gripper.goto(width=1, speed=0.01, force=0.5)
+        self._gripper.grasp(speed=0.01, force=1)
+        print("Grasping")
 
     def start(self):
         self._robot.start_cartesian_impedance()

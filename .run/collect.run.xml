@@ -5,11 +5,13 @@
     <option name="INTERPRETER_OPTIONS" value="" />
     <option name="PARENT_ENVS" value="true" />
     <envs>
+      <env name="CONDA_PREFIX" value="$USER_HOME$/anaconda3/envs/ACMECollection" />
       <env name="HYDRA_FULL_ERROR" value="1" />
       <env name="NUC_PWD" value="james" />
       <env name="NUC_USER" value="james" />
+      <env name="PYTHONUNBUFFERED" value="1" />
       <env name="RS_LOG_FILE" value="$USER_HOME$/realsense.log" />
-      <env name="CONDA_PREFIX" value="$USER_HOME$/anaconda3/envs/ACMECollection" />
+      <env name="PATH" value="$USER_HOME$/anaconda3:$USER_HOME$/anaconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin" />
     </envs>
     <option name="SDK_HOME" value="" />
     <option name="SDK_NAME" value="ACMECollection" />

@@ -6,14 +6,15 @@
     <option name="PARENT_ENVS" value="true" />
     <envs>
       <env name="PYTHONUNBUFFERED" value="1" />
+      <env name="CONDA_PREFIX" value="$USER_HOME$/anaconda3/envs/ACMECollection" />
       <env name="HYDRA_FULL_ERROR" value="1" />
       <env name="NUC_PWD" value="james" />
       <env name="NUC_USER" value="james" />
       <env name="RS_LOG_FILE" value="$USER_HOME$/realsense.log" />
-      <env name="CONDA_PREFIX" value="$USER_HOME$/anaconda3/envs/ACMECollection" />
+      <env name="PATH" value="$USER_HOME$/anaconda3:$USER_HOME$/anaconda3/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin" />
     </envs>
     <option name="SDK_HOME" value="" />
-    <option name="SDK_NAME" value="ACMECollection" />
+    <option name="SDK_NAME" value="ACMEReal" />
     <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/client" />
     <option name="IS_MODULE_SDK" value="false" />
     <option name="ADD_CONTENT_ROOTS" value="true" />

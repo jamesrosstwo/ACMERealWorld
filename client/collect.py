@@ -43,8 +43,8 @@ def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
             latest_eef_pos = eef_pos
             latest_eef_rot = eef_rot
         # PUSH T FREEZES
-        eef_pos[-1] = 0.3
-        eef_rot = np.array([0.94, 0.335, 0, -0.03])
+        eef_pos[-1] = 0.38
+        eef_rot = np.array([0.942, 0.336, 0, 0])
         nuc.send_control(eef_pos, eef_rot, None)
 
     def _loop_runner():

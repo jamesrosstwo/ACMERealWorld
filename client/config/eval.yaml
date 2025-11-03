@@ -4,10 +4,10 @@ start_index: 0
 policy:
   control_frequency: 1
   obs_history: 2
-  rgb_keys: ["rgb_0"]
+  rgb_keys: ["rgb_0", "rgb_1"]
   lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
   delta_actions: false
-  port: 54400
+  port: 54900
   frame_shape:
     - 3
     - 256
@@ -35,7 +35,7 @@ realsense:
   fps: 15
   obs_cams:
     - "848312071702" # overhead
-    - "219423020719" # wrist cam
+    - "217222061106" # wrist cam
 
 hydra:
   output_subdir: null

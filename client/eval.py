@@ -195,18 +195,18 @@ class PolicyInterface:
 
     def __call__(self,
                  rgb_0: torch.Tensor,
-                 #rgb_1: torch.Tensor,
+                 rgb_1: torch.Tensor,
                  eef_pos: np.ndarray,
                  eef_quat: np.ndarray,
                  gripper_force: np.ndarray) -> torch.Tensor:
         """
         Send binary data using multipart/form-data for efficient transfer.
         """
-        files = {}
         data = {}
 
+        files = dict()
         # Add RGB frames as binary data
-        rgb_data = {"rgb_0": rgb_0}#, "rgb_1": rgb_1}
+        rgb_data = {"rgb_0": rgb_0, "rgb_1": rgb_1}
 
         for rgb_key, frames in rgb_data.items():
             buffer = io.BytesIO()
@@ -251,11 +251,11 @@ class PolicyInterface:
             resp.raise_for_status()
             result = resp.json()
             action_tensor = torch.tensor(result["action"])
-            if self._delta_actions:
-                cumulative = torch.cumsum(action_tensor, dim=1)
-                cumulative[:, :, :3] += eef_pos[:, -1]
-                cumulative[:, :, 3:7] += eef_quat[:, -1]
-                return cumulative
+            # if self._delta_actions:
+            #     cumulative = torch.cumsum(action_tensor, dim=1)
+            #     cumulative[:, :, :3] += eef_pos[:, -1]
+            #     cumulative[:, :, 3:7] += eef_quat[:, -1]
+            #     return cumulative
             return action_tensor
         except Exception as err:
             logging.info(f"Error communicating with the server: {err}")
@@ -386,9 +386,14 @@ def start_control_loop(policy: PolicyInterface, realsense: EvalRSI, nuc: NUCInte
         eef_pos = np.stack([s["ee_pos"] for s in current_states[-policy.obs_history_size:]])
         eef_rot = np.stack([s["ee_rot"] for s in current_states[-policy.obs_history_size:]])
 
+        # action = policy(
+        #     static_view=resized_frames[0].unsqueeze(0),
+        #     wrist_view=resized_frames[1].unsqueeze(0),
+        # )
+
         action = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
-            # rgb_1=resized_frames[1].unsqueeze(0),
+            rgb_1=resized_frames[1].unsqueeze(0),
             eef_pos=np.expand_dims(eef_pos, 0),
             eef_quat=np.expand_dims(eef_rot, 0),
             gripper_force=np.zeros((1, policy.obs_history_size, 1))
@@ -466,7 +471,7 @@ def main(cfg: DictConfig):
 
                 rsi.start_capture(on_receive_frame)
                 print("Waiting for realsense caches to fill")
-                time.sleep(2.0)
+                time.sleep(5.0)
 
                 stop_control, get_action = start_control_loop(policy, rsi, nuc, writer.states)
 
