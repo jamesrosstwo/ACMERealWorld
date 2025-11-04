@@ -7,7 +7,7 @@ policy:
   rgb_keys: ["rgb_0", "rgb_1"]
   lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
   delta_actions: false
-  port: 54900
+  port: 54070
   frame_shape:
     - 3
     - 256

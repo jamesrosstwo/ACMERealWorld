@@ -1,0 +1,6 @@
+[2025-11-03 19:53:40,581][root][INFO] - Error communicating with the server: module 'torch' has no attribute 'zeos'
+[2025-11-03 20:00:37,604][root][INFO] - Error communicating with the server: tuple index out of range
+[2025-11-03 20:54:40,341][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-03 20:56:29,403][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-03 20:57:06,728][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 21:00:55,316][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.

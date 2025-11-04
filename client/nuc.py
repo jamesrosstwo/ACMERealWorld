@@ -98,6 +98,7 @@ class NUCInterface:
         # PUSH T FREEZES
         self._robot.move_to_ee_pose(*self.pusht_home)
         # self._gripper.goto(width=1, speed=0.01, force=0.5)
+        # time.sleep(10)
         self._gripper.grasp(speed=0.01, force=1)
         print("Grasping")
 
