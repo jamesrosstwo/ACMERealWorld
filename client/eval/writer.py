@@ -111,6 +111,7 @@ def inference_fig(all_inferences: Dict[str, np.ndarray]) -> go.Figure:
         action_colors = np.full(action_trace.shape[0], action_col)
 
         points = np.vstack([obs_trace, action_trace])
+        points[:, 2] = 0
         colors = np.concatenate([obs_colors, action_colors])
 
         # End-effector trajectory (solid blue)
@@ -122,7 +123,7 @@ def inference_fig(all_inferences: Dict[str, np.ndarray]) -> go.Figure:
             name=f'trace_{trace_idx}',
             line=dict(color='black', width=3),
             marker=dict(
-                size=2,
+                size=4,
                 color=colors,
                 colorscale="Viridis"
             )

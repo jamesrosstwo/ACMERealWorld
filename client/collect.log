@@ -1144,3 +1144,9 @@
 [2025-10-28 20:26:12,028][polymetis.robot_interface][WARNING] - Unable to find valid joint target. Skipping update_desired_ee_pose command...
 [2025-10-28 20:26:12,032][polymetis.robot_interface][WARNING] - Unable to find valid joint target. Skipping update_desired_ee_pose command...
 [2025-10-28 20:26:12,041][polymetis.robot_interface][WARNING] - Unable to find valid joint target. Skipping update_desired_ee_pose command...
+[2025-11-07 16:11:00,404][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-07 16:14:16,504][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-07 16:30:02,430][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-07 16:33:22,397][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-07 16:36:14,919][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-07 16:56:21,873][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.

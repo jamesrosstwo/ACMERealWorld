@@ -14,12 +14,19 @@ class EvalPolicyInterface:
     Interface for an ACMEPolicy running on some local port
     """
 
-    def __init__(self, control_frequency: float, obs_history: int, rgb_keys: List[str], lowdim_keys: List[str],
+    def __init__(self, control_frequency: float,
+                 obs_history: int,
+                 action_horizon: int,
+                 action_start_offset: int,
+                 rgb_keys: List[str],
+                 lowdim_keys: List[str],
                  frame_shape: List[int],
                  port: int,
                  delta_actions: bool = False):
         self._control_frequency = control_frequency
         self._obs_history = obs_history
+        self._action_horizon = action_horizon
+        self._offset = action_start_offset
         self._rgb_keys = rgb_keys
         self._lowdim_keys = lowdim_keys
         self._frame_shape = frame_shape
@@ -57,7 +64,7 @@ class EvalPolicyInterface:
             frame = frame.float()
 
         # BGR → RGB (flip channel 0 and 2)
-        # frame = frame[..., [2, 1, 0]]
+        frame = frame[..., [2, 1, 0]]
 
         # NHWC → NCHW
         frame = frame.permute(0, 3, 1, 2)
@@ -137,8 +144,9 @@ class EvalPolicyInterface:
                 return cumulative
 
             # un-batch
-            desired_eef_pos = action[0, :, :3]
-            desired_eef_rot = action[0, :, 3:7]
+            o = self._offset
+            desired_eef_pos = action[0, o:self._action_horizon + o, :3]
+            desired_eef_rot = action[0, o:self._action_horizon + o, 3:7]
             desired_gripper_force = torch.zeros((desired_eef_pos.shape[0], 1))
             return desired_eef_pos, desired_eef_rot, desired_gripper_force
         except Exception as err:

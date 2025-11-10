@@ -4,3 +4,40 @@
 [2025-11-03 20:56:29,403][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
 [2025-11-03 20:57:06,728][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-11-03 21:00:55,316][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 21:25:32,984][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 21:27:51,250][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 21:31:33,976][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 21:33:08,893][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 21:33:33,999][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-03 21:35:47,588][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 21:36:00,817][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-03 21:49:10,276][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 21:58:49,297][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 22:03:19,398][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 22:03:33,207][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-03 22:06:19,162][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-03 22:07:06,701][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 22:14:26,142][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 22:20:15,304][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 22:20:29,653][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-03 22:22:43,022][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 22:24:42,000][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-03 22:24:55,304][polymetis.robot_interface][WARNING] - Unable to find valid joint target. Skipping update_desired_ee_pose command...
+[2025-11-03 22:24:56,113][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-03 22:25:57,868][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-04 22:03:35,656][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54303): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7e2005ed1b80>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-04 22:59:58,321][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54267): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7769a9e543a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-05 10:04:27,940][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54777): Read timed out. (read timeout=30)
+[2025-11-05 10:06:06,039][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54777): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x718e72ffd5b0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-05 10:07:18,883][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54357): Read timed out. (read timeout=30)
+[2025-11-05 10:13:25,199][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54410): Read timed out. (read timeout=30)
+[2025-11-05 11:10:21,284][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-05 11:10:50,141][root][INFO] - Error communicating with the server: Failed to parse: http://localhost:54172z/predict
+[2025-11-05 11:11:14,702][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-06 15:39:26,743][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54659): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x708c92310d30>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-10 15:51:17,754][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54953): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x77d897cf9940>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-10 15:58:21,833][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-10 16:03:45,786][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-10 16:06:17,334][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-10 16:22:42,521][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-10 16:24:55,900][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.

@@ -67,7 +67,11 @@ def start_control_loop(
         all_states = list(writer.states)
         eef_pos = np.stack([s["ee_pos"] for s in all_states[-policy.obs_history_size:]])
         eef_rot = np.stack([s["ee_rot"] for s in all_states[-policy.obs_history_size:]])
+
+        cur_eef_pos = nuc.get_robot_state()["ee_pos"]
+        print(f"\tInput positional error: {(cur_eef_pos - eef_pos[-1]) * 100}cm")
         gripper_force = np.zeros((policy.obs_history_size, 1))
+        eef_pos[:, -1] = 0
 
         # action = policy(
         #     static_view=resized_frames[0].unsqueeze(0),
@@ -90,7 +94,7 @@ def start_control_loop(
         desired_eef_quat = torch.zeros((horizon_len, 4))
         desired_eef_quat[:] = torch.from_numpy(home_eef_rot)
         desired_eef_quat = desired_eef_quat.to(torch.float64)
-        print(eef_pos, "->", desired_eef_pos[:, :3])
+        # print(eef_pos, "->", desired_eef_pos[:, :3])
         writer.on_inference(
             ee_pos=eef_pos,
             ee_quat=eef_rot,
@@ -99,9 +103,13 @@ def start_control_loop(
             desired_ee_quat=desired_eef_quat.numpy(),
             desired_gripper_force=np.zeros((desired_eef_pos.shape[0], 1))
         )
+        per_step_sleep = 1.0 / (policy.control_frequency * horizon_len)
         for i in range(horizon_len):
-            nuc.send_control_tensor(desired_eef_pos[-1], desired_eef_quat[-1], None)
-            time.sleep(1.0 / (policy.control_frequency * horizon_len))
+            nuc.send_control_tensor(desired_eef_pos[i], desired_eef_quat[i], None)
+            time.sleep(per_step_sleep)
+        time.sleep(2 * per_step_sleep)
+        eef_pos = nuc.get_robot_state()["ee_pos"]
+        # print(f"\tPositional Error: {(eef_pos - desired_eef_pos[-1].numpy()) * 100} cm")
 
     def _loop_runner():
         while not stop_event.is_set():

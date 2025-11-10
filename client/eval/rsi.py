@@ -68,20 +68,19 @@ class EvalRSI(RealSenseInterface):
             print(f"   Camera {idx}: {serial}  ({product})")
 
         pipelines = []
-        for idx, (serial, _) in enumerate(cameras):
-            if serial not in self._obs_cam_serial:
-                continue
+
+        for serial in self._obs_cam_serial:
             pipe, cfg = self.create_pipeline(serial, self._width, self._height, self._fps)
             pipelines.append((pipe, cfg))
         return pipelines
 
-    def __init__(self, n_frames: int, width: int, height: int, fps: int, obs_cams: List[int], init=True):
+    def __init__(self, n_frames: int, width: int, height: int, fps: int, obs_cams: List[str], init=True):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self._n_frames = n_frames
         self._width = width
         self._height = height
         self._fps = fps
-        self._obs_cam_serial = obs_cams
+        self._obs_cam_serial: List[str] = obs_cams
         if init:
             self._pipelines = self._initialize_cameras()
             self._stop_events = []
@@ -103,7 +102,11 @@ class EvalRSI(RealSenseInterface):
 
         for idx, (pipe, cfg) in enumerate(self._pipelines):
             stop_event = threading.Event()
-            pipe.start(cfg)
+            profile = pipe.start(cfg)
+
+            col_sensor = profile.get_device().query_sensors()[1]
+            col_sensor.set_option(rs.option.exposure, 250)
+            col_sensor.set_option(rs.option.gain, 128)
             t = self._FrameGrabberThread(idx, pipe, _callback_wrapper, stop_event)
             t.start()
             self._threads.append(t)

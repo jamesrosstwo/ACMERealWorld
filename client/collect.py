@@ -68,7 +68,7 @@ def start_control_loop(gello: GELLOInterface, nuc: NUCInterface):
 
 
 
-@hydra.main(config_path="config", config_name="collect")
+@hydra.main(config_path="../config", config_name="collect")
 def main(cfg: DictConfig):
     nuc = NUCInterface(**cfg.nuc)
     gello = GELLOInterface(**cfg.gello)

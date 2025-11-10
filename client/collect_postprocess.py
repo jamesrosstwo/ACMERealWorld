@@ -40,7 +40,7 @@ def gather_data(episodes_path: str, n_frames: int, writer_cfg: DictConfig, reals
             print(f"bags unindexed for episode {ep_path}")
 
 
-@hydra.main(config_path="config", config_name="collect")
+@hydra.main(config_path="../config", config_name="collect")
 def main(cfg: DictConfig):
     n_frames = cfg.max_episode_timesteps
     gather_data(cfg.episodes_path, n_frames, cfg.writer, cfg.realsense)
