@@ -41,3 +41,5 @@
 [2025-11-10 16:06:17,334][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-11-10 16:22:42,521][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-11-10 16:24:55,900][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-11 13:38:34,578][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-11 13:59:09,764][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54316): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x71ad6e7d3f40>: Failed to establish a new connection: [Errno 111] Connection refused'))

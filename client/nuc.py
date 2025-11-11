@@ -45,7 +45,7 @@ class NUCInterface:
 
     @property
     def pusht_home(self):
-        return np.array([0.5, -0.2, 0.38]), np.array([0.942, 0.336, 0, 0])
+        return np.array([0.425, -0.375, 0.38]), np.array([0.942, 0.336, 0, 0])
 
     def __init__(self, ip: str, server: DictConfig, franka_ip: str):
         self._franka_ip = franka_ip
@@ -97,7 +97,7 @@ class NUCInterface:
         self._robot.move_to_ee_pose(current_ee_pos + torch.tensor([0, 0, 0.15]))
         # PUSH T FREEZES
         self._robot.move_to_ee_pose(*self.pusht_home)
-        # self._gripper.goto(width=1, speed=0.01, force=0.5)
+        # self._gripper.goto(width=1, speed=0.05, force=0.5)
         # time.sleep(6)
         self._gripper.grasp(speed=0.01, force=1)
         print("Grasping")

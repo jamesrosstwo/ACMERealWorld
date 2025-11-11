@@ -1,19 +1,10 @@
+defaults:
+  - policy: default
+
 max_episode_timesteps: 1000
 start_index: 0
 
-policy:
-  control_frequency: 0.7
-  obs_history: 2
-  action_horizon: 8
-  action_start_offset: 2
-  rgb_keys: ["rgb_0", "rgb_1"]
-  lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
-  delta_actions: false
-  port: 54281
-  frame_shape:
-    - 3
-    - 256
-    - 256
+
 
 writer:
   max_episode_len: ${max_episode_timesteps}

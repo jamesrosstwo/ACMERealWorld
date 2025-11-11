@@ -186,7 +186,7 @@ class RealSenseInterface:
             bagpaths.append(bagpath)
 
         print("Waiting for cameras to start..")
-        time.sleep(5.0)
+        time.sleep(8.0)
         return pipelines, bagpaths
 
     def stop_capture(self, capture_idx: int):

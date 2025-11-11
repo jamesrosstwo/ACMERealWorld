@@ -227,6 +227,7 @@ class ACMEWriter:
 
             state = zarr.open_group(str(self.path / "episode.zarr"), mode="r+")
             orig_len = len(next(iter(state.values())))
+            # Aligns timesteps when some cameras are slightly slower
             if orig_len != sync_len:
                 orig_idx = np.linspace(0, 1, orig_len)
                 new_idx = np.linspace(0, 1, sync_len)
