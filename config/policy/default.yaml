@@ -2,7 +2,7 @@ policy:
   control_frequency: 0.7
   obs_history: 2
   action_horizon: 16
-  action_start_offset: 0899
+  action_start_offset: 2
   rgb_keys: ["rgb_0", "rgb_1"]
   lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
   delta_actions: false

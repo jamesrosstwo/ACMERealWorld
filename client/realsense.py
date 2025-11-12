@@ -1,6 +1,7 @@
 import threading
 import time
 import traceback
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 import pyrealsense2 as rs
 import numpy as np
@@ -70,8 +71,7 @@ class RSBagProcessor:
                 col_tmstmp = self.get_tmstmp(color_frame)
                 dep_tmstmp = self.get_tmstmp(depth_frame)
                 # Yield the frame data
-                if frame_idx > 15:
-                    yield color, col_tmstmp, depth, dep_tmstmp, cam_idx
+                yield color, col_tmstmp, depth, dep_tmstmp, cam_idx
                 frame_idx += 1
 
 

@@ -52,7 +52,7 @@ class NUCInterface:
         self._nuc_ip = ip
         self._server_cfg = server
         # self._nuc_client = self._launch_server(**self._server_cfg)
-        # print("Waiting for server to start")
+        # print("Waiting for ser ver to start")
         # time.sleep(20.0)
 
         self._robot = RobotInterface(
@@ -61,7 +61,7 @@ class NUCInterface:
 
         self._gripper = GripperInterface(
             ip_address=self._nuc_ip,
-            port=self._server_cfg.gripper_port
+            port= self._server_cfg.gripper_port
         )
 
         self._desired_eef_pos, self._desired_eef_rot = self.pusht_home
