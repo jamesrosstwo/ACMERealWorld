@@ -1,7 +1,7 @@
 defaults:
   - policy: default
 
-max_episode_timesteps: 1000
+max_episode_timesteps: 4000
 start_index: 0
 
 
@@ -17,8 +17,8 @@ nuc:
     port: 22
     robot_port: 50051
     gripper_port: 50052
-    user: ${env:NUC_USER}
-    pwd: ${env:NUC_PWD}
+    user: ${env:NUC_USER}1
+
     conda: "/home/james/anaconda3"
 
 realsense:
@@ -27,9 +27,11 @@ realsense:
   height: 720
   fps: 15
   obs_cams:
-    - "148122060186" # side view
+    - "148122060186" # high right
+    - "932122060415" # high left
 #    - "848312071702" # overhead
-    - "217222061106" # wrist cam
+#    - "217222061106" # wrist cam
+#    - "051222062898"
 
 hydra:
   output_subdir: null

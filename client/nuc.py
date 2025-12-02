@@ -3,6 +3,7 @@ import threading
 import time
 
 import numpy as np
+import polymetis_pb2
 import torch
 from omegaconf import DictConfig
 from polymetis import RobotInterface, GripperInterface
@@ -51,6 +52,7 @@ class NUCInterface:
         self._franka_ip = franka_ip
         self._nuc_ip = ip
         self._server_cfg = server
+        self._last_gripper_state = False
         # self._nuc_client = self._launch_server(**self._server_cfg)
         # print("Waiting for ser ver to start")
         # time.sleep(20.0)
@@ -81,25 +83,31 @@ class NUCInterface:
     def forward_kinematics(self, joint_positions: torch.Tensor):
         return tuple([x.cpu().numpy() for x in self._robot.robot_model.forward_kinematics(joint_positions)])
 
-    def send_control(self, eef_pos: np.ndarray, eef_rot: np.ndarray, gripper_pos: np.ndarray):
-        # self._robot.update_desired_joint_positions(torch.tensor(joint_angles))
+    def send_control(self, eef_pos: np.ndarray, eef_rot: np.ndarray, gripper: np.ndarray):
         self._desired_eef_pos = eef_pos.copy()
         self._desired_eef_rot = eef_rot.copy()
-        self._robot.update_desired_ee_pose(torch.tensor(eef_pos), torch.tensor(eef_rot))
+        self.send_control_tensor(torch.tensor(eef_pos), torch.tensor(eef_rot), None)
 
-    def send_control_tensor(self, eef_pos: torch.Tensor, eef_rot: torch.Tensor, gripper_pos: torch.Tensor):
-        self._desired_eef_pos = eef_pos.cpu().numpy()
-        self._desired_eef_rot = eef_rot.cpu().numpy()
+    def send_control_tensor(self, eef_pos: torch.Tensor, eef_rot: torch.Tensor, gripper: torch.Tensor):
         self._robot.update_desired_ee_pose(eef_pos, eef_rot)
+        # if gripper > 0:
+        #     if not self._last_gripper_state:
+        #         self._gripper.grasp(speed=0.1, force=1., blocking=False)
+        #         self._last_gripper_state = True
+        # else:
+        #     if self._last_gripper_state:
+        #         self._gripper.grasp(grasp_width=0.25, speed=0.1, force=0.5, blocking=False)
+        #         self._last_gripper_state = False
 
     def reset(self):
         current_ee_pos, current_ee_rot = self._robot.get_ee_pose()
         self._robot.move_to_ee_pose(current_ee_pos + torch.tensor([0, 0, 0.15]))
         # PUSH T FREEZES
         self._robot.move_to_ee_pose(*self.pusht_home)
-        # self._gripper.goto(width=1, speed=0.05, force=0.5)
+        # self._gripper.goto(width=0.25, speed=0.1, force=0.5, blocking=False)
         # time.sleep(6)
-        self._gripper.grasp(speed=0.01, force=1)
+
+        self._gripper.grasp(speed=0.01, force=1, blocking=False)
         print("Grasping")
 
     def start(self):

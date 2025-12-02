@@ -140,8 +140,11 @@ class RealSenseInterface:
 
             dep = profile.get_stream(rs.stream.depth)
             i = dep.as_video_stream_profile().get_intrinsics()
-            print(i.fx, i.fy, i.ppx, i.ppy)
-            self._all_intr.append(np.asarray(i.ppx))
+
+
+            intr_vals = i.fx, i.fy, i.ppx, i.ppy
+            print(f"Camera {idx} intrinsics: {intr_vals})")
+            self._all_intr.append(np.asarray(intr_vals))
 
             col_sensor = profile.get_device().query_sensors()[1]
             col_sensor.set_option(rs.option.exposure, 250)

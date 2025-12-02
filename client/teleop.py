@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Tuple, List
 
 import numpy as np
+from omegaconf import DictConfig
 
 from gello.dynamixel.driver import DynamixelDriver
 
@@ -44,12 +45,21 @@ class _GelloArgs:
         return list(range(self.base_index, self.num_joints + self.base_index))
 
 class GELLOInterface:
-    def __init__(self, joint_signs: List[int], *args, **kwargs):
-        self._args = _GelloArgs(joint_signs=joint_signs, *args, **kwargs)
+    def __init__(self, joint_signs: List[int], gripper: DictConfig, *args, **kwargs):
+        self._args = _GelloArgs(joint_signs=tuple(joint_signs), *args, **kwargs)
         self._driver = DynamixelDriver(self._args.joint_ids, port=self._args.port, baudrate=self._args.baud_rate)
         self._joint_signs = np.array(joint_signs)
         self._joint_adjustment = np.zeros(7)
         self._eef_pos_adjustment = np.zeros(3)
+        self._gripper = gripper
+
+    def get_gripper(self):
+        gripper_range = [self._gripper.open, self._gripper.closed]
+        jointval = self._driver.get_joints()[-1]
+        gripper_joint = np.interp(jointval, gripper_range, [-1., 1.])
+        g = gripper_joint * self._gripper.sign
+        return g
+
 
     def _get_joints(self):
         return (self._joint_signs * self._driver.get_joints()[:7])

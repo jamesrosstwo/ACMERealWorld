@@ -29,6 +29,5 @@ def main(cfg: DictConfig):
     calibration_episode_path = gather_data(cfg.n_frames, cfg.writer, cfg.realsense)
     # KalibrInterface().run_calibration(calibration_episode_path)
 
-
 if __name__ == "__main__":
     main()

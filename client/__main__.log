@@ -43,3 +43,27 @@
 [2025-11-10 16:24:55,900][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-11-11 13:38:34,578][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
 [2025-11-11 13:59:09,764][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54316): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x71ad6e7d3f40>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-12 10:01:01,406][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-12 10:02:02,922][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-14 11:39:47,339][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54267): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x70d806241ac0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-14 16:22:57,750][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54307): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x795b498ca3a0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-14 16:24:07,944][root][INFO] - Error communicating with the server: ('Connection aborted.', ConnectionResetError(104, 'Connection reset by peer'))
+[2025-11-17 14:42:11,431][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-17 14:51:22,590][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-17 14:54:32,489][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-17 14:56:46,151][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54093): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x72e90d6117f0>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-17 14:58:32,401][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-17 14:58:44,131][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54093): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7285eaa4e040>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-17 15:35:55,037][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-18 17:08:12,484][polymetis.robot_interface][WARNING] - Unable to find valid joint target. Skipping move_to_ee_pose command...
+[2025-11-18 17:25:53,080][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-18 17:35:48,120][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-18 17:44:56,935][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-19 15:57:57,058][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-19 15:58:20,393][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-21 12:47:03,767][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-21 12:47:16,427][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54057): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x76bf564c7b50>: Failed to establish a new connection: [Errno 111] Connection refused'))
+[2025-11-21 13:05:40,773][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-21 13:08:30,341][polymetis.robot_interface][ERROR] - Unable to update desired joint positions. Use 'start_joint_impedance' to start a joint impedance controller.
+[2025-11-21 13:21:00,282][polymetis.gripper_interface][WARNING] - Metadata unavailable from server.
+[2025-11-25 19:59:36,809][root][INFO] - Error communicating with the server: HTTPConnectionPool(host='localhost', port=54583): Max retries exceeded with url: /predict (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x7b5f5edf2c10>: Failed to establish a new connection: [Errno 111] Connection refused'))

@@ -1,4 +1,4 @@
-max_episode_timesteps: 600
+max_episode_timesteps: 590
 episodes_path: "/mnt/ssd/james/episodes"
 
 nuc:
@@ -50,6 +50,10 @@ gello:
     - 0
     - 1.57
     - 0
+  gripper:
+    open: 2 # from logging the dynamixel joint vals
+    closed: 1.5
+    sign: -1
 
 hydra:
   output_subdir: null

@@ -187,20 +187,16 @@ class ACMEWriter:
                 synced_depth_frames = []
                 synced_timestamps = []
 
-                d_idx, r_idx = 0, 0
+                t_idx = 0
                 for t in ref_ts:
-                    # nearest RGB
-                    while (r_idx + 1 < len(rgb_ts) and
-                           abs(rgb_ts[r_idx + 1] - t) < abs(rgb_ts[r_idx] - t)):
-                        r_idx += 1
-                    # nearest depth
-                    while (d_idx + 1 < len(depth_ts) and
-                           abs(depth_ts[d_idx + 1] - t) < abs(depth_ts[d_idx] - t)):
-                        d_idx += 1
+                    while (t_idx + 1 < len(rgb_ts) and
+                           abs(rgb_ts[t_idx + 1] - t) < abs(rgb_ts[t_idx] - t)):
+                        t_idx += 1
 
-                    synced_rgb_frames.append(rgb_frames[r_idx])
-                    synced_depth_frames.append(depth_frames[d_idx])
-                    synced_timestamps.append((rgb_ts[r_idx], depth_ts[d_idx]))
+                    synced_rgb_frames.append(rgb_frames[t_idx])
+                    # Assume depth and rgb are captured simultaneously (usually <1ms off in practice)
+                    synced_depth_frames.append(depth_frames[t_idx])
+                    synced_timestamps.append(rgb_ts[t_idx])
 
                 global_synced.append((cap, synced_rgb_frames, synced_depth_frames, synced_timestamps))
 
@@ -220,10 +216,8 @@ class ACMEWriter:
                 rgb_out.release()
 
                 # timestamps
-                with open(str(cap._path / "timestamps.npz"), "wb") as f:
-                    np.savez_compressed(f,
-                                        color=[c for c, _ in synced_timestamps],
-                                        depth=[d for _, d in synced_timestamps])
+                with open(str(cap._path / "timestamps.npy"), "wb") as f:
+                    np.savez(f, np.asarray(synced_timestamps))
 
             state = zarr.open_group(str(self.path / "episode.zarr"), mode="r+")
             orig_len = len(next(iter(state.values())))
