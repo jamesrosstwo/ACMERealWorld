@@ -54,12 +54,12 @@ class PandaServer:
         print(f"Panda server started on ports {port}, {port + 1}, {gripper_port}")
     
     def get_state(self) -> RobotState:
-        ee_pose = self._robot.get_pose()
+        robot_state = self._robot.get_state()
         gripper_state = self._gripper.read_once()
         return RobotState(
-            q=np.array(self._robot.q),
-            dq=np.array(self._robot.dq),
-            O_T_EE=ee_pose,
+            q=np.array(robot_state.q),
+            dq=np.array(robot_state.dq),
+            O_T_EE=np.array(robot_state.O_T_EE).reshape(4, 4),
             gripper_width=gripper_state.width
         )
     
@@ -131,7 +131,10 @@ class PandaServer:
             quat = np.array(msg['quat'])
             rot = Rotation.from_quat(quat)
             rot_matrix = rot.as_matrix()
-            self._robot.move_to_pose(pos, rot_matrix)
+            transform = np.eye(4)
+            transform[:3, :3] = rot_matrix
+            transform[:3, 3] = pos
+            self._robot.move_to_pose(transform)
             return {'success': True}
         
         elif cmd == 'update_desired_ee_pose':
@@ -208,8 +211,11 @@ class PandaServer:
                 if pos is not None:
                     rot = Rotation.from_quat(quat)
                     rot_matrix = rot.as_matrix()
+                    transform = np.eye(4)
+                    transform[:3, :3] = rot_matrix
+                    transform[:3, 3] = pos
                     try:
-                        self._robot.set_cartesian_impedance_target(pos, rot_matrix)
+                        self._robot.set_cartesian_impedance_target(transform)
                     except Exception as e:
                         print(f"Control error: {e}")
             
