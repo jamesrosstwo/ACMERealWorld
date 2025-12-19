@@ -1,4 +1,4 @@
-max_episode_timesteps: 590
+max_episode_timesteps: 500
 episodes_path: "/mnt/ssd/james/episodes"
 
 nuc:
@@ -31,16 +31,16 @@ writer:
     fps: ${realsense.fps}
 
 gello:
-  base_index: 8
+  base_index: 0
   baud_rate: 115200
-  port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTA2U2FX-if00-port0"
+  port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTA2U2CD-if00-port0"
   joint_signs:
     - 1
     - 1
     - 1
-    - -1
     - 1
-    - -1
+    - 1
+    - 1
     - 1
   start_joints:
     - 0
@@ -58,4 +58,4 @@ gello:
 hydra:
   output_subdir: null
   run:
-    dir: .
+    dir: .1

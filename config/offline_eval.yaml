@@ -1,5 +1,5 @@
 defaults:
   - policy: default
 
-dtst_path: /home/rvl_root/Desktop/ACMERealWorld/policies/pusht_multiview_110/learn_policy/dataset
-sample_horizon: 8
+dtst_path: /home/rvl_root/Desktop/ACMERealWorld/policies/130ep_1400k/dataset
+sample_horizon: 14

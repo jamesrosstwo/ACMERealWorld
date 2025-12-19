@@ -104,10 +104,10 @@ class NUCInterface:
         self._robot.move_to_ee_pose(current_ee_pos + torch.tensor([0, 0, 0.15]))
         # PUSH T FREEZES
         self._robot.move_to_ee_pose(*self.pusht_home)
-        # self._gripper.goto(width=0.25, speed=0.1, force=0.5, blocking=False)
+        # self._gripper.goto(width=0.25, speed=0.1, force=0.5, blocking=True)
         # time.sleep(6)
 
-        self._gripper.grasp(speed=0.01, force=1, blocking=False)
+        self._gripper.grasp(speed=0.01, force=1, blocking=True)
         print("Grasping")
 
     def start(self):

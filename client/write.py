@@ -242,11 +242,12 @@ class ACMEWriter:
 
             metadata = dict(
                 n_timesteps=sync_len,
-                instruction=self.instruction
+                instruction=self.instruction,
+                dynamic_captures=[5]
             )
             with open(self.episode_path / "metadata.yaml", "w") as f:
                 yaml.dump(metadata, f)
 
-            shutil.copy(str(self.calibration_path), self.episode_path / "params.yaml")
+            # shutil.copy(str(self.calibration_path), self.episode_path / "params.yaml")
         except IndexError:
             pass
