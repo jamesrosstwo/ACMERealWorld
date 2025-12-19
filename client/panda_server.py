@@ -184,15 +184,27 @@ class PandaServer:
         elif cmd == 'move':
             width = msg['width']
             speed = msg.get('speed', 0.1)
-            self._gripper.move(width, speed)
+            # Run move in background thread since it may be blocking
+            def do_move():
+                try:
+                    self._gripper.move(width, speed)
+                except Exception as e:
+                    print(f"Gripper move error: {e}")
+            threading.Thread(target=do_move, daemon=True).start()
             return {'success': True}
         
         elif cmd == 'grasp':
             width = msg.get('width', 0.0)
             speed = msg.get('speed', 0.1)
             force = msg.get('force', 10.0)
-            result = self._gripper.grasp(width, speed, force)
-            return {'success': True, 'grasped': result}
+            # Run grasp in background thread since it's blocking
+            def do_grasp():
+                try:
+                    self._gripper.grasp(width, speed, force)
+                except Exception as e:
+                    print(f"Grasp error: {e}")
+            threading.Thread(target=do_grasp, daemon=True).start()
+            return {'success': True, 'grasped': True}
         
         elif cmd == 'stop':
             self._gripper.stop()
