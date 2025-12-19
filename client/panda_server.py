@@ -56,10 +56,11 @@ class PandaServer:
     def get_state(self) -> RobotState:
         robot_state = self._robot.get_state()
         gripper_state = self._gripper.read_once()
+        O_T_EE = np.array(robot_state.O_T_EE).reshape(4, 4, order='F')
         return RobotState(
             q=np.array(robot_state.q),
             dq=np.array(robot_state.dq),
-            O_T_EE=np.array(robot_state.O_T_EE).reshape(4, 4),
+            O_T_EE=O_T_EE,
             gripper_width=gripper_state.width
         )
     
@@ -119,17 +120,19 @@ class PandaServer:
             ee_pos = state.O_T_EE[:3, 3]
             ee_rot_matrix = state.O_T_EE[:3, :3]
             rot = Rotation.from_matrix(ee_rot_matrix)
-            ee_quat = rot.as_quat()
+            ee_quat_xyzw = rot.as_quat()  # scipy returns (x, y, z, w)
+            ee_quat_wxyz = np.array([ee_quat_xyzw[3], ee_quat_xyzw[0], ee_quat_xyzw[1], ee_quat_xyzw[2]])
             return {
                 'success': True,
                 'ee_pos': ee_pos.tolist(),
-                'ee_rot': ee_quat.tolist()
+                'ee_rot': ee_quat_wxyz.tolist()
             }
         
         elif cmd == 'move_to_ee_pose':
             pos = np.array(msg['pos'])
-            quat = np.array(msg['quat'])
-            rot = Rotation.from_quat(quat)
+            quat_wxyz = np.array(msg['quat'])  # incoming is (w, x, y, z)
+            quat_xyzw = np.array([quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]])  # convert to (x, y, z, w) for scipy
+            rot = Rotation.from_quat(quat_xyzw)
             rot_matrix = rot.as_matrix()
             transform = np.eye(4)
             transform[:3, :3] = rot_matrix
@@ -158,7 +161,8 @@ class PandaServer:
             q = np.array(msg['q'])
             # Use panda model for FK
             model = self._robot.get_model()
-            pose = model.pose(panda_py.constants.Frame.kEndEffector, q)
+            pose_flat = model.pose(panda_py.constants.Frame.kEndEffector, q)
+            pose = np.array(pose_flat).reshape(4, 4, order='F')
             return {
                 'success': True,
                 'pose': pose.flatten().tolist()
@@ -209,7 +213,8 @@ class PandaServer:
                         quat = self._desired_ee_rot.copy()
                 
                 if pos is not None:
-                    rot = Rotation.from_quat(quat)
+                    quat_xyzw = np.array([quat[1], quat[2], quat[3], quat[0]])  # convert (w,x,y,z) to (x,y,z,w) for scipy
+                    rot = Rotation.from_quat(quat_xyzw)
                     rot_matrix = rot.as_matrix()
                     transform = np.eye(4)
                     transform[:3, :3] = rot_matrix
