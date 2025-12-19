@@ -120,19 +120,17 @@ class PandaServer:
             ee_pos = state.O_T_EE[:3, 3]
             ee_rot_matrix = state.O_T_EE[:3, :3]
             rot = Rotation.from_matrix(ee_rot_matrix)
-            ee_quat_xyzw = rot.as_quat()  # scipy returns (x, y, z, w)
-            ee_quat_wxyz = np.array([ee_quat_xyzw[3], ee_quat_xyzw[0], ee_quat_xyzw[1], ee_quat_xyzw[2]])
+            ee_quat = rot.as_quat()  # scipy returns (x, y, z, w) - use directly
             return {
                 'success': True,
                 'ee_pos': ee_pos.tolist(),
-                'ee_rot': ee_quat_wxyz.tolist()
+                'ee_rot': ee_quat.tolist()
             }
         
         elif cmd == 'move_to_ee_pose':
             pos = np.array(msg['pos'])
-            quat_wxyz = np.array(msg['quat'])  # incoming is (w, x, y, z)
-            quat_xyzw = np.array([quat_wxyz[1], quat_wxyz[2], quat_wxyz[3], quat_wxyz[0]])  # convert to (x, y, z, w) for scipy
-            rot = Rotation.from_quat(quat_xyzw)
+            quat = np.array(msg['quat'])  # assume (x, y, z, w) format like scipy
+            rot = Rotation.from_quat(quat)
             rot_matrix = rot.as_matrix()
             transform = np.eye(4)
             transform[:3, :3] = rot_matrix
@@ -213,8 +211,7 @@ class PandaServer:
                         quat = self._desired_ee_rot.copy()
                 
                 if pos is not None:
-                    quat_xyzw = np.array([quat[1], quat[2], quat[3], quat[0]])  # convert (w,x,y,z) to (x,y,z,w) for scipy
-                    rot = Rotation.from_quat(quat_xyzw)
+                    rot = Rotation.from_quat(quat)  # assume (x, y, z, w) format
                     rot_matrix = rot.as_matrix()
                     transform = np.eye(4)
                     transform[:3, :3] = rot_matrix
