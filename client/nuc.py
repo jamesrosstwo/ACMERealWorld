@@ -1,18 +1,67 @@
 import os
 import threading
 import time
+import zmq
 
 import numpy as np
 import polymetis_pb2
 import torch
 from omegaconf import DictConfig
-from polymetis import RobotInterface, GripperInterface
+from polymetis import RobotInterface
 import paramiko
 
 
 def stream_output(stream, prefix=''):
     for line in iter(stream.readline, ""):
         print(f"{prefix}{line.strip()}")
+
+
+class GripperInterface:
+    def __init__(self, ip_address: str, port: int = 5558):
+        self._context = zmq.Context()
+        self._socket = self._context.socket(zmq.REQ)
+        self._socket.connect(f"tcp://{ip_address}:{port}")
+    
+    def _send_command(self, cmd: dict) -> dict:
+        self._socket.send_json(cmd)
+        return self._socket.recv_json()
+    
+    def get_state(self):
+        response = self._send_command({'cmd': 'get_state'})
+        return GripperState(
+            width=response['width'],
+            max_width=response['max_width'],
+            is_grasped=response['is_grasped']
+        )
+    
+    def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
+        self._send_command({
+            'cmd': 'move',
+            'width': width,
+            'speed': speed
+        })
+    
+    def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
+        response = self._send_command({
+            'cmd': 'grasp',
+            'width': grasp_width,
+            'speed': speed,
+            'force': force
+        })
+        return response.get('grasped', False)
+    
+    def stop(self):
+        self._send_command({'cmd': 'stop'})
+    
+    def close(self):
+        self._context.term()
+
+
+class GripperState:
+    def __init__(self, width: float, max_width: float, is_grasped: bool):
+        self.width = width
+        self.max_width = max_width
+        self.is_grasped = is_grasped
 
 
 class NUCInterface:
