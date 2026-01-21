@@ -12,6 +12,7 @@ nuc:
     user: ${env:NUC_USER}
     pwd: ${env:NUC_PWD}
     conda: "/home/james/anaconda3"
+    gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
 
 realsense:
   n_frames: ${max_episode_timesteps}

@@ -20,6 +20,7 @@ nuc:
     user: ${env:NUC_USER}1
 
     conda: "/home/james/anaconda3"
+    gripper_hysteresis: 0.1
 
 realsense:
   n_frames: ${max_episode_timesteps}

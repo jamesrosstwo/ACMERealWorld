@@ -15,17 +15,21 @@ def stream_output(stream, prefix=''):
         print(f"{prefix}{line.strip()}")
 
 
+import threading
 from scipy.spatial.transform import Rotation
 import panda_py
 
 
 class GripperInterface:
-    def __init__(self, ip_address: str, port: int = None):
+    def __init__(self, ip_address: str, hysteresis: float = 0.1):
         print(f"DEBUG: Initializing GripperInterface via panda-py at {ip_address}")
-        # Initialize direct libfranka Gripper connection
-        # According to docs: panda_py.libfranka.Gripper
         self._gripper = panda_py.libfranka.Gripper(ip_address)
-
+        
+        # Async state
+        self._thread = None
+        self._target_grasp_state = False # False=Open, True=Grasped
+        self._hysteresis = hysteresis
+    
     def get_state(self):
         state = self._gripper.read_once()
         return GripperState(
@@ -33,22 +37,52 @@ class GripperInterface:
             max_width=state.max_width,
             is_grasped=state.is_grasped
         )
-
+    
     def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
         self._gripper.move(width=width, speed=speed)
-
+    
     def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
         try:
             return self._gripper.grasp(width=grasp_width, speed=speed, force=force)
         except RuntimeError:
             return False
-
+            
     def stop(self):
         self._gripper.stop()
-
+    
     def close(self):
-        # Gripper object doesn't strictly need close, goes out of scope
         pass
+
+    def _do_grasp(self):
+        self.grasp(speed=0.1, force=10.0, blocking=True)
+
+    def _do_open(self):
+        mx = self.get_state().max_width
+        self.goto(width=mx, speed=0.1, blocking=True)
+
+    def act_async(self, gripper_val: float):
+        # Sticky Grip Logic with hysteresis
+        val = float(gripper_val)
+        
+        # Hysteresis thresholds to prevent rapid toggling
+        grasp_threshold = 0.5 + self._hysteresis
+        open_threshold = 0.5 - self._hysteresis
+        
+        # If a thread is already running, we are busy transitioning -> do nothing (sticky)
+        if self._thread and self._thread.is_alive():
+            return
+
+        if val > grasp_threshold and not self._target_grasp_state:
+            # Transition to GRASP
+            self._target_grasp_state = True
+            self._thread = threading.Thread(target=self._do_grasp)
+            self._thread.start()
+        
+        elif val < open_threshold and self._target_grasp_state:
+            # Transition to OPEN
+            self._target_grasp_state = False
+            self._thread = threading.Thread(target=self._do_open)
+            self._thread.start()
 
 
 class GripperState:
@@ -73,8 +107,9 @@ class NUCInterface:
         self._controller = None
 
         # Gripper is separate connection
-        self._gripper = GripperInterface(self._franka_ip)
-
+        hysteresis = getattr(server, 'gripper_hysteresis', 0.1)
+        self._gripper = GripperInterface(self._franka_ip, hysteresis=hysteresis)
+        
         self._desired_eef_pos, self._desired_eef_rot = self._panda.get_position(), self._panda.get_orientation(
             scalar_first=False)
 
@@ -107,24 +142,21 @@ class NUCInterface:
         self._desired_eef_rot = eef_rot.copy()
         if self._controller:
             self._controller.set_control(eef_pos, eef_rot)
+        
+        if gripper is not None:
+             g_val = gripper.item() if hasattr(gripper, 'item') else float(gripper)
+             self._gripper.act_async(g_val)
 
     def send_control_tensor(self, eef_pos: torch.Tensor, eef_rot: torch.Tensor, gripper: torch.Tensor):
-        self.send_control(eef_pos.cpu().numpy(), eef_rot.cpu().numpy(), None)
+        # Pass gripper tensor converted to numpy (or None if not present, but usually present)
+        g = gripper.cpu().numpy() if gripper is not None else None
+        self.send_control(eef_pos.cpu().numpy(), eef_rot.cpu().numpy(), g)
 
     def reset(self):
-        # Move to home
-        # pos, rot = self.pusht_home
-        # self._panda.move_to_pose(pos, rot)
         self._panda.move_to_start()
         time.sleep(10)
 
-        self._gripper.grasp(speed=0.01, force=1, blocking=True)
-        print("Grasping")
-
     def start(self):
-        # Start impedance controller
-        # We need to install/import controllers if they are separate
-        # Assuming panda_py.controllers.CartesianImpedance exists
         try:
             from panda_py import controllers
             self._controller = controllers.CartesianImpedance()
