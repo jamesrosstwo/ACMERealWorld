@@ -19,31 +19,34 @@ from scipy.spatial.transform import Rotation
 import panda_py
 
 class GripperInterface:
-    def __init__(self, panda_robot):
-        # reuse the existing connection
-        self._panda = panda_robot
+    def __init__(self, ip_address: str, port: int = None):
+        print(f"DEBUG: Initializing GripperInterface via panda-py at {ip_address}")
+        # Initialize direct libfranka Gripper connection
+        # According to docs: panda_py.libfranka.Gripper
+        self._gripper = panda_py.libfranka.Gripper(ip_address)
     
     def get_state(self):
-        state = self._panda.get_state()
+        state = self._gripper.read_once()
         return GripperState(
-            width=state.gripper_width,
-            max_width=state.gripper_max_width,
-            is_grasped=state.gripper_width < 0.08
+            width=state.width,
+            max_width=state.max_width,
+            is_grasped=state.is_grasped
         )
     
     def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
-        self._panda.get_gripper().move(width=width, speed=speed)
+        self._gripper.move(width=width, speed=speed)
     
     def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
         try:
-            return self._panda.get_gripper().grasp(width=grasp_width, speed=speed, force=force, epsilon=0.005)
+            return self._gripper.grasp(width=grasp_width, speed=speed, force=force, epsilon=0.005)
         except RuntimeError:
             return False
     
     def stop(self):
-        self._panda.get_gripper().stop()
+        self._gripper.stop()
     
     def close(self):
+        # Gripper object doesn't strictly need close, goes out of scope
         pass
 
 
@@ -68,7 +71,8 @@ class NUCInterface:
         self._panda = panda_py.Panda(self._franka_ip)
         self._controller = None
 
-        self._gripper = GripperInterface(self._panda)
+        # Gripper is separate connection
+        self._gripper = GripperInterface(self._franka_ip)
 
         self._desired_eef_pos, self._desired_eef_rot = self.pusht_home
 
@@ -92,21 +96,18 @@ class NUCInterface:
         return st
 
     def forward_kinematics(self, joint_positions: torch.Tensor):
-        # panda-py usually exposes a helper for FK
-        # If not available directly on instance, we might need simple kinematics.
-        # Assuming panda-py has `fk(q)` based on common bindings.
-        # If not, this method will fail and user will report.
-        # Since input is tensor, convert to list/numpy
-        q = joint_positions.cpu().numpy().tolist()
+        # panda-py exposes fk function
+        q = joint_positions.cpu().numpy().reshape(7, 1) # Ensure correct shape if needed
         try:
-            pose = panda_py.fk(q) # Potential API guess, or self._panda.get_model().pose(frames.EE, q)
+            pose = panda_py.fk(q)
             # If panda_py returns 4x4 matrix
             mat = np.array(pose).reshape(4, 4).T
             pos = mat[:3, 3]
             rot = Rotation.from_matrix(mat[:3, :3]).as_quat()
             return pos, rot
         except AttributeError:
-            print("WARNING: forward_kinematics not implemented in panda-py NUCInterface")
+             # Fallback just in case
+            print("WARNING: forward_kinematics (panda_py.fk) not found/working")
             return np.zeros(3), np.array([0, 0, 0, 1])
 
     def send_control(self, eef_pos: np.ndarray, eef_rot: np.ndarray, gripper: np.ndarray):
