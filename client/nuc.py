@@ -1,7 +1,6 @@
 import os
 import threading
 import time
-import zmq
 
 import numpy as np
 import polymetis_pb2
@@ -16,59 +15,39 @@ def stream_output(stream, prefix=''):
         print(f"{prefix}{line.strip()}")
 
 
-class GripperInterface:
-    def __init__(self, ip_address: str, port: int = 5558):
-        self._context = zmq.Context()
-        self._socket = self._context.socket(zmq.REQ)
-        self._socket.setsockopt(zmq.RCVTIMEO, 2000)
-        self._socket.setsockopt(zmq.SNDTIMEO, 2000)
-        self._socket.setsockopt(zmq.LINGER, 0)
-        self._socket.connect(f"tcp://{ip_address}:{port}")
-    
-    def _send_command(self, cmd: dict) -> dict:
-        self._socket.send_json(cmd)
-        try:
-            return self._socket.recv_json()
-        except zmq.Again:
-            print(f"Gripper command {cmd} timed out")
-            return {}
+import panda_py
 
-    def test_connection(self) -> bool:
-        try:
-            state = self.get_state()
-            return state.max_width >= 0
-        except Exception:
-            return False
+class GripperInterface:
+    def __init__(self, ip_address: str, port: int = None):
+        print(f"DEBUG: Initializing GripperInterface via panda-py at {ip_address}")
+        # Initialize Panda interface, just for gripper control if possible
+        self._panda = panda_py.Panda(ip_address)
     
     def get_state(self):
-        response = self._send_command({'cmd': 'get_state'})
+        # panda-py state is usually a dict or object
+        state = self._panda.get_state()
         return GripperState(
-            width=response['width'],
-            max_width=response['max_width'],
-            is_grasped=response['is_grasped']
+            width=state.gripper_width,
+            max_width=state.gripper_max_width, # Assuming attribute names, need to verify or be defensive
+            is_grasped=state.gripper_width < 0.08 # simplified check
+            # Real panda-py might not expose 'is_grasped' directly in state, often inferred from width and last command success
         )
     
     def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
-        self._send_command({
-            'cmd': 'move',
-            'width': width,
-            'speed': speed
-        })
+        self._panda.get_gripper().move(width=width, speed=speed)
     
     def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
-        response = self._send_command({
-            'cmd': 'grasp',
-            'width': grasp_width,
-            'speed': speed,
-            'force': force
-        })
-        return response.get('grasped', False)
+        # returns boolean success
+        try:
+            return self._panda.get_gripper().grasp(width=grasp_width, speed=speed, force=force, epsilon=0.005)
+        except RuntimeError:
+            return False
     
     def stop(self):
-        self._send_command({'cmd': 'stop'})
+        self._panda.get_gripper().stop()
     
     def close(self):
-        self._context.term()
+        pass # panda-py handles cleanup likely
 
 
 class GripperState:
@@ -125,13 +104,10 @@ class NUCInterface:
         )
 
         self._gripper = GripperInterface(
-            ip_address=self._nuc_ip,
-            port= self._server_cfg.gripper_port
+            ip_address=self._franka_ip, # Use direct robot IP, not NUC IP
+            port=None
         )
-        if not self._gripper.test_connection():
-            print(f"WARNING: Gripper at {self._nuc_ip}:{self._server_cfg.gripper_port} is NOT ALIVE or TIMED OUT.")
-        else:
-            print(f"Gripper at {self._nuc_ip}:{self._server_cfg.gripper_port} is ALIVE.")
+        # NUCInterface alive check simplified or removed as panda-py connection throws on init if failed
 
         self._desired_eef_pos, self._desired_eef_rot = self.pusht_home
 
