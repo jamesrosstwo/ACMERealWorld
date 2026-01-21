@@ -20,11 +20,25 @@ class GripperInterface:
     def __init__(self, ip_address: str, port: int = 5558):
         self._context = zmq.Context()
         self._socket = self._context.socket(zmq.REQ)
+        self._socket.setsockopt(zmq.RCVTIMEO, 2000)
+        self._socket.setsockopt(zmq.SNDTIMEO, 2000)
+        self._socket.setsockopt(zmq.LINGER, 0)
         self._socket.connect(f"tcp://{ip_address}:{port}")
     
     def _send_command(self, cmd: dict) -> dict:
         self._socket.send_json(cmd)
-        return self._socket.recv_json()
+        try:
+            return self._socket.recv_json()
+        except zmq.Again:
+            print(f"Gripper command {cmd} timed out")
+            return {}
+
+    def test_connection(self) -> bool:
+        try:
+            state = self.get_state()
+            return state.max_width >= 0
+        except Exception:
+            return False
     
     def get_state(self):
         response = self._send_command({'cmd': 'get_state'})
@@ -114,6 +128,10 @@ class NUCInterface:
             ip_address=self._nuc_ip,
             port= self._server_cfg.gripper_port
         )
+        if not self._gripper.test_connection():
+            print(f"WARNING: Gripper at {self._nuc_ip}:{self._server_cfg.gripper_port} is NOT ALIVE or TIMED OUT.")
+        else:
+            print(f"Gripper at {self._nuc_ip}:{self._server_cfg.gripper_port} is ALIVE.")
 
         self._desired_eef_pos, self._desired_eef_rot = self.pusht_home
 
