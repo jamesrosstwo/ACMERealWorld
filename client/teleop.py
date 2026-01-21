@@ -56,7 +56,7 @@ class GELLOInterface:
     def get_gripper(self):
         gripper_range = [self._gripper.open, self._gripper.closed]
         jointval = self._driver.get_joints()[-1]
-        gripper_joint = np.interp(jointval, gripper_range, [-1., 1.])
+        gripper_joint = np.interp(jointval, gripper_range, [0, 1.])
         g = gripper_joint * self._gripper.sign
         return g
 

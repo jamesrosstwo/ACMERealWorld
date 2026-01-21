@@ -51,8 +51,8 @@ gello:
     - 1.57
     - 0
   gripper:
-    open: 2 # from logging the dynamixel joint vals
-    closed: 1.5
+    open: 0.35 # from logging the dynamixel joint vals
+    closed: -0.62
     sign: -1
 
 hydra:

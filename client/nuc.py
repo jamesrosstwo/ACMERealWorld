@@ -18,13 +18,14 @@ def stream_output(stream, prefix=''):
 from scipy.spatial.transform import Rotation
 import panda_py
 
+
 class GripperInterface:
     def __init__(self, ip_address: str, port: int = None):
         print(f"DEBUG: Initializing GripperInterface via panda-py at {ip_address}")
         # Initialize direct libfranka Gripper connection
         # According to docs: panda_py.libfranka.Gripper
         self._gripper = panda_py.libfranka.Gripper(ip_address)
-    
+
     def get_state(self):
         state = self._gripper.read_once()
         return GripperState(
@@ -32,19 +33,19 @@ class GripperInterface:
             max_width=state.max_width,
             is_grasped=state.is_grasped
         )
-    
+
     def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
         self._gripper.move(width=width, speed=speed)
-    
+
     def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
         try:
             return self._gripper.grasp(width=grasp_width, speed=speed, force=force)
         except RuntimeError:
             return False
-    
+
     def stop(self):
         self._gripper.stop()
-    
+
     def close(self):
         # Gripper object doesn't strictly need close, goes out of scope
         pass
@@ -59,8 +60,8 @@ class GripperState:
 
 class NUCInterface:
     @property
-    def pusht_home(self):
-        return np.array([0., -0.375, 0.38]), np.array([0.942, 0.336, 0, 0])
+    def home(self):
+        return np.array([0.30582778, 0., 0.48467681]), np.array([1., 0., 0., 0.])
 
     def __init__(self, ip: str, server: DictConfig, franka_ip: str):
         self._franka_ip = franka_ip
@@ -74,7 +75,8 @@ class NUCInterface:
         # Gripper is separate connection
         self._gripper = GripperInterface(self._franka_ip)
 
-        self._desired_eef_pos, self._desired_eef_rot = self.pusht_home
+        self._desired_eef_pos, self._desired_eef_rot = self._panda.get_position(), self._panda.get_orientation(
+            scalar_first=False)
 
     def get_desired_ee_pose(self):
         return np.concatenate([self._desired_eef_pos, self._desired_eef_rot]).copy()
@@ -82,34 +84,29 @@ class NUCInterface:
     def get_robot_state(self):
         R = self._panda.get_pose()[:3, :3]
         t = self._panda.get_position()
-        ee_rot = Rotation.from_matrix(R).as_quat() # xyzw
+        ee_rot = Rotation.from_matrix(R).as_quat()  # xyzw
 
         # Match expected dict keys
         st = dict(qpos=self._panda.q, ee_pos=t, ee_rot=ee_rot, gripper_force=np.zeros(1))
         return st
 
     def forward_kinematics(self, joint_positions: torch.Tensor):
-        # panda-py exposes fk function
-        q = joint_positions.cpu().numpy().reshape(7, 1) # Ensure correct shape if needed
+        q = joint_positions.cpu().numpy().reshape(7, 1)  # Ensure correct shape if needed
         try:
             pose = panda_py.fk(q)
-            # If panda_py returns 4x4 matrix
-            mat = np.array(pose).reshape(4, 4).T
+            mat = np.array(pose).reshape(4, 4)
             pos = mat[:3, 3]
             rot = Rotation.from_matrix(mat[:3, :3]).as_quat()
             return pos, rot
         except AttributeError:
-             # Fallback just in case
             print("WARNING: forward_kinematics (panda_py.fk) not found/working")
-            return np.zeros(3), np.array([0, 0, 0, 1])
+            return np.zeros(3), np.array([1, 0, 0, 0])
 
     def send_control(self, eef_pos: np.ndarray, eef_rot: np.ndarray, gripper: np.ndarray):
         self._desired_eef_pos = eef_pos.copy()
         self._desired_eef_rot = eef_rot.copy()
         if self._controller:
-             # Convert xyzw to wxyz if needed? Scipy is xyzw. Libfranka usually xyzw.
-             # panda_py set_attractor expected format?
-             self._controller.set_control(eef_pos, eef_rot)
+            self._controller.set_control(eef_pos, eef_rot)
 
     def send_control_tensor(self, eef_pos: torch.Tensor, eef_rot: torch.Tensor, gripper: torch.Tensor):
         self.send_control(eef_pos.cpu().numpy(), eef_rot.cpu().numpy(), None)
@@ -120,7 +117,7 @@ class NUCInterface:
         # self._panda.move_to_pose(pos, rot)
         self._panda.move_to_start()
         time.sleep(10)
-        
+
         self._gripper.grasp(speed=0.01, force=1, blocking=True)
         print("Grasping")
 
