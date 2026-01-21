@@ -38,7 +38,7 @@ class GripperInterface:
     
     def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
         try:
-            return self._gripper.grasp(width=grasp_width, speed=speed, force=force, epsilon=0.005)
+            return self._gripper.grasp(width=grasp_width, speed=speed, force=force)
         except RuntimeError:
             return False
     
@@ -60,7 +60,7 @@ class GripperState:
 class NUCInterface:
     @property
     def pusht_home(self):
-        return np.array([0.425, -0.375, 0.38]), np.array([0.942, 0.336, 0, 0])
+        return np.array([0., -0.375, 0.38]), np.array([0.942, 0.336, 0, 0])
 
     def __init__(self, ip: str, server: DictConfig, franka_ip: str):
         self._franka_ip = franka_ip
@@ -80,19 +80,12 @@ class NUCInterface:
         return np.concatenate([self._desired_eef_pos, self._desired_eef_rot]).copy()
 
     def get_robot_state(self):
-        state = self._panda.get_state()
-        qpos = np.array(state.q)
-        qvel = np.array(state.dq)
-        
-        # O_T_EE is a list/array of 16 floats (column-major usually in libfranka, panda-py might wrap it)
-        # panda-py usually returns numpy array 4x4
-        O_T_EE = np.array(state.O_T_EE).reshape(4, 4).T # Transpose because libfranka is col-major
-        
-        ee_pos = O_T_EE[:3, 3]
-        ee_rot = Rotation.from_matrix(O_T_EE[:3, :3]).as_quat() # xyzw
-        
+        R = self._panda.get_pose()[:3, :3]
+        t = self._panda.get_position()
+        ee_rot = Rotation.from_matrix(R).as_quat() # xyzw
+
         # Match expected dict keys
-        st = dict(qpos=qpos, qvel=qvel, ee_pos=ee_pos, ee_rot=ee_rot, gripper_force=np.zeros(1))
+        st = dict(qpos=self._panda.q, ee_pos=t, ee_rot=ee_rot, gripper_force=np.zeros(1))
         return st
 
     def forward_kinematics(self, joint_positions: torch.Tensor):
@@ -116,15 +109,17 @@ class NUCInterface:
         if self._controller:
              # Convert xyzw to wxyz if needed? Scipy is xyzw. Libfranka usually xyzw.
              # panda_py set_attractor expected format?
-             self._controller.set_attractor(eef_pos, eef_rot)
+             self._controller.set_control(eef_pos, eef_rot)
 
     def send_control_tensor(self, eef_pos: torch.Tensor, eef_rot: torch.Tensor, gripper: torch.Tensor):
         self.send_control(eef_pos.cpu().numpy(), eef_rot.cpu().numpy(), None)
 
     def reset(self):
         # Move to home
-        pos, rot = self.pusht_home
-        self._panda.move_to_pose(pos, rot)
+        # pos, rot = self.pusht_home
+        # self._panda.move_to_pose(pos, rot)
+        self._panda.move_to_start()
+        time.sleep(10)
         
         self._gripper.grasp(speed=0.01, force=1, blocking=True)
         print("Grasping")
