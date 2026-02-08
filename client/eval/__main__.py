@@ -163,19 +163,21 @@ def main(cfg: DictConfig):
             print(e)
             traceback.print_exc()
         finally:
-            ep_control_msg = "1: Record Success \n2: Record Failure\n0: Delete this recording.\nx: Exit\nz: Next episode"
-            ep_control_cmd = str(input(ep_control_msg)).strip()
-            while ep_control_cmd not in ["x", "z"]:
+            ep_control_msg = "1: Record Success\n2: Record Failure\n0: Delete this recording.\nx: Exit\nz: Next episode\n"
+            while True:
                 ep_control_cmd = str(input(ep_control_msg)).strip()
                 if ep_control_cmd == "1":
                     successes.append(True)
+                    break
                 elif ep_control_cmd == "2":
                     successes.append(False)
+                    break
                 elif ep_control_cmd == "0":
                     if ep_path and ep_path.exists():
                         shutil.rmtree(ep_path)
                 elif ep_control_cmd == "x":
                     should_exit = True
+                    break
                 elif ep_control_cmd == "z":
                     break
 
