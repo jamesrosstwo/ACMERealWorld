@@ -45,13 +45,16 @@ class NUCInterface:
         return client
 
     @property
-    def pusht_home(self):
-        return np.array([0.425, -0.375, 0.38]), np.array([0.942, 0.336, 0, 0])
+    def home(self):
+        return self._home_pos.copy(), self._home_rot.copy()
 
-    def __init__(self, ip: str, server: DictConfig, franka_ip: str):
+    def __init__(self, ip: str, server: DictConfig, franka_ip: str,
+                 home_pos=(0.425, -0.375, 0.38), home_rot=(0.942, 0.336, 0, 0)):
         self._franka_ip = franka_ip
         self._nuc_ip = ip
         self._server_cfg = server
+        self._home_pos = np.array(home_pos)
+        self._home_rot = np.array(home_rot)
         self._last_gripper_state = False
 
         self._robot = RobotInterface(
@@ -63,7 +66,7 @@ class NUCInterface:
             port= self._server_cfg.gripper_port
         )
 
-        self._desired_eef_pos, self._desired_eef_rot = self.pusht_home
+        self._desired_eef_pos, self._desired_eef_rot = self.home
 
     def get_desired_ee_pose(self):
         return np.concatenate([self._desired_eef_pos, self._desired_eef_rot]).copy()
@@ -90,7 +93,7 @@ class NUCInterface:
         current_ee_pos, current_ee_rot = self._robot.get_ee_pose()
         self._robot.move_to_ee_pose(current_ee_pos + torch.tensor([0, 0, 0.15]))
         # PUSH T FREEZES
-        self._robot.move_to_ee_pose(*self.pusht_home)
+        self._robot.move_to_ee_pose(*self.home)
         self._gripper.grasp(speed=0.01, force=1, blocking=True)
         print("Grasping")
 

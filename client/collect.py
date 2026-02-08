@@ -26,9 +26,9 @@ def action_step(gello: GELLOInterface, nuc: NUCInterface):
     joint_angles = gello.get_joint_angles()
     eef_pos, eef_rot = nuc.forward_kinematics(torch.tensor(joint_angles))
 
-    # PUSHT
-    eef_pos[-1] = 0.38
-    eef_rot = np.array([0.942, 0.336, 0, 0])
+    home_pos, home_rot = nuc.home
+    eef_pos[-1] = home_pos[-1]
+    eef_rot = home_rot
     gripper_force = np.zeros(1)
     nuc.send_control(eef_pos, eef_rot, None)
     action = np.concatenate([eef_pos, eef_rot, gripper_force])
@@ -45,8 +45,8 @@ def main(cfg: DictConfig):
         try:
             ep_path = get_latest_ep_path(base_ep_path, prefix="episode")
             print(f"Recording to {ep_path}")
-            episode_writer = ACMEWriter(ep_path, **cfg.writer)
             with RealSenseInterface(ep_path, **cfg.realsense) as rs_interface:
+                episode_writer = ACMEWriter(ep_path, n_cameras=rs_interface.n_cameras, **cfg.writer)
                 nuc.reset()
                 start_control(gello, nuc)
                 def on_receive_frame(capture_idx):

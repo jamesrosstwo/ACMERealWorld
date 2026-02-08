@@ -60,7 +60,7 @@ def start_control_loop(
 
 
         horizon_len = desired_eef_pos.shape[0]
-        home_eef_pos, home_eef_rot = nuc.pusht_home
+        home_eef_pos, home_eef_rot = nuc.home
         desired_eef_pos[:, -1] = home_eef_pos[-1]
         desired_eef_pos = desired_eef_pos.to(torch.float64)
         desired_eef_quat = torch.zeros((horizon_len, 4))

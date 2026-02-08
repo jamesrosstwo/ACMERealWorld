@@ -25,8 +25,8 @@ def gather_data(episodes_path: str, n_frames: int, writer_cfg: DictConfig, reals
                 shutil.rmtree(Path(ep_path / "captures"))
             except FileNotFoundError:
                 pass
-            writer = ACMEWriter(ep_path, **writer_cfg)
             bagpaths = list(Path(ep_path).glob("*.bag"))
+            writer = ACMEWriter(ep_path, n_cameras=len(bagpaths), **writer_cfg)
             rs_interface =  RSBagProcessor(bagpaths, **realsense)
             print(f"found {len(bagpaths)} bags")
             for color, color_tmstmp, depth, depth_tmstmp, cap_idx in tqdm(rs_interface.process_all_frames()):

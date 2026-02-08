@@ -4,6 +4,8 @@ episodes_path: "/mnt/ssd/james/episodes"
 nuc:
   ip: "192.168.1.106"
   franka_ip: "192.168.1.107"
+  home_pos: [0.425, -0.375, 0.38]
+  home_rot: [0.942, 0.336, 0, 0]
   server:
     ip: ${nuc.ip}
     port: 22
@@ -21,7 +23,6 @@ realsense:
 
 writer:
   max_episode_len: ${max_episode_timesteps}
-  n_cameras: 6
   instruction: "Push the green T shape into the black outline of the T shape on the table"
   calibration_path: "/home/rvl_root/.config/JetBrains/PyCharm2025.2/scratches/calib.yaml"
   captures:
