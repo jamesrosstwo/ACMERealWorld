@@ -1,7 +1,6 @@
 import threading
 import time
 import traceback
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable
 import pyrealsense2 as rs
 import numpy as np
@@ -15,15 +14,6 @@ def enumerate_devices():
     for d in ctx.query_devices():
         serial = d.get_info(rs.camera_info.serial_number)
         product = d.get_info(rs.camera_info.product_line)
-        # sensors = d.query_sensors()
-        # for sensor in sensors:
-        #     for profile in sensor.get_stream_profiles():
-        #         try:
-        #             video_profile = profile.as_video_stream_profile()
-        #             intrinsics = video_profile.get_intrinsics()
-        #             print(f"Serial: {serial}, Stream: {video_profile.stream_type()}, Index: {video_profile.stream_index()}, Format: {video_profile.format()}, Resolution: {intrinsics.width}x{intrinsics.height}, Intrinsics: {intrinsics}")
-        #         except:
-        #             pass
         devs.append((serial, product))
     return devs
 
@@ -149,7 +139,6 @@ class RealSenseInterface:
             col_sensor = profile.get_device().query_sensors()[1]
             col_sensor.set_option(rs.option.exposure, 250)
             col_sensor.set_option(rs.option.gain, 128)
-            # col_sensor.set_option(rs.option.white_balance, 4000)
             t = self._FrameGrabberThread(idx, pipe, _callback_wrapper, stop_event)
             t.start()
             self._threads.append(t)
@@ -208,5 +197,3 @@ class RealSenseInterface:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop_all_captures()
-        # for shm_path in tqdm(self._recording_bagpaths, "Saving recordings"):
-        #     shutil.move(str(shm_path), str(self._path / Path(shm_path).name))

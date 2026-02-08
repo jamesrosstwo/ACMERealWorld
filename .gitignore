@@ -3,3 +3,4 @@ outputs/
 episodes/
 **.pyc
 policies
+tasks.json

@@ -53,9 +53,6 @@ class NUCInterface:
         self._nuc_ip = ip
         self._server_cfg = server
         self._last_gripper_state = False
-        # self._nuc_client = self._launch_server(**self._server_cfg)
-        # print("Waiting for ser ver to start")
-        # time.sleep(20.0)
 
         self._robot = RobotInterface(
             ip_address=self._nuc_ip,
@@ -72,11 +69,9 @@ class NUCInterface:
         return np.concatenate([self._desired_eef_pos, self._desired_eef_rot]).copy()
 
     def get_robot_state(self):
-        # gripper_state = self._gripper.get_state()
         qpos = self._robot.get_joint_positions()
         qvel = self._robot.get_joint_velocities()
         ee_pos, ee_rot = self._robot.get_ee_pose()
-        # gripper_force = gripper_state.force  # idk
         state = dict(qpos=qpos, qvel=qvel, ee_pos=ee_pos, ee_rot=ee_rot, gripper_force=torch.zeros(1))
         return {k: v.detach().cpu().numpy() for k, v in state.items()}
 
@@ -90,23 +85,12 @@ class NUCInterface:
 
     def send_control_tensor(self, eef_pos: torch.Tensor, eef_rot: torch.Tensor, gripper: torch.Tensor):
         self._robot.update_desired_ee_pose(eef_pos, eef_rot)
-        # if gripper > 0:
-        #     if not self._last_gripper_state:
-        #         self._gripper.grasp(speed=0.1, force=1., blocking=False)
-        #         self._last_gripper_state = True
-        # else:
-        #     if self._last_gripper_state:
-        #         self._gripper.grasp(grasp_width=0.25, speed=0.1, force=0.5, blocking=False)
-        #         self._last_gripper_state = False
 
     def reset(self):
         current_ee_pos, current_ee_rot = self._robot.get_ee_pose()
         self._robot.move_to_ee_pose(current_ee_pos + torch.tensor([0, 0, 0.15]))
         # PUSH T FREEZES
         self._robot.move_to_ee_pose(*self.pusht_home)
-        # self._gripper.goto(width=0.25, speed=0.1, force=0.5, blocking=True)
-        # time.sleep(6)
-
         self._gripper.grasp(speed=0.01, force=1, blocking=True)
         print("Grasping")
 
@@ -114,5 +98,4 @@ class NUCInterface:
         self._robot.start_cartesian_impedance()
 
     def close(self):
-        # self._nuc_client.close()
         pass

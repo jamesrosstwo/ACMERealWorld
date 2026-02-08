@@ -140,7 +140,6 @@ class EvalPolicyInterface:
                 cumulative = torch.cumsum(action, dim=1)
                 cumulative[:, :, :3] += eef_pos[:, -1]
                 cumulative[:, :, 3:7] += eef_quat[:, -1]
-                raise ValueError()
                 return cumulative
 
             # un-batch

@@ -12,7 +12,6 @@ from client.nuc import NUCInterface
 from client.realsense import RealSenseInterface
 from client.teleop import GELLOInterface
 from client.write import ACMEWriter
-import threading
 
 
 def get_latest_ep_path(base_episodes_path: Path, prefix: str):
@@ -34,10 +33,8 @@ def start_control(gello: GELLOInterface, nuc: NUCInterface):
 
 def action_step(gello: GELLOInterface, nuc: NUCInterface):
     joint_angles = gello.get_joint_angles()
-    gripper = gello.get_gripper()
     eef_pos, eef_rot = nuc.forward_kinematics(torch.tensor(joint_angles))
 
-    action = [eef_pos, eef_rot, np.array(gripper)[None]]
     # PUSHT
     eef_pos[-1] = 0.38
     eef_rot = np.array([0.942, 0.336, 0, 0])

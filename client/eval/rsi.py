@@ -1,31 +1,13 @@
-import io
-import logging
-import select
-import shutil
-import sys
+import threading
 import traceback
-import time
 from collections import deque
-from pathlib import Path
-from typing import Callable, List, Dict
+from typing import Callable, List
 
-import torch.nn.functional as F
-
-from pathlib import Path
-from PIL import Image
-
-import hydra
 import numpy as np
-import requests
 import torch
-import yaml
-from omegaconf import DictConfig, OmegaConf
-import plotly.graph_objects as go
 
-from client.nuc import NUCInterface
 from client.realsense import RealSenseInterface, enumerate_devices
 import pyrealsense2 as rs
-import threading
 
 
 
@@ -95,7 +77,6 @@ class EvalRSI(RealSenseInterface):
         def _callback_wrapper(cap_idx):
             if on_receive_frame is not None:
                 on_receive_frame(cap_idx)
-            self._latest_rgb_frames = None
             self.frame_counts[cap_idx] += 1
             if self.frame_counts[cap_idx] >= self._n_frames:
                 self.stop_capture(cap_idx)

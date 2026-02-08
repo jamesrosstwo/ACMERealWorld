@@ -248,6 +248,5 @@ class ACMEWriter:
             with open(self.episode_path / "metadata.yaml", "w") as f:
                 yaml.dump(metadata, f)
 
-            # shutil.copy(str(self.calibration_path), self.episode_path / "params.yaml")
         except IndexError:
             pass

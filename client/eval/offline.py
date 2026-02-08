@@ -51,8 +51,6 @@ def get_obs(root, idx: int, obs_hist: int):
 
 def error(desired_eef_pos, desired_eef_rot, desired_gripper_pos, gt_action) -> Tuple[float, float, float]:
     pos_mse = np.mean((gt_action[:, :2] - desired_eef_pos[:, :2].numpy()) ** 2)
-    # gt_eef_rot = gt_action[3:7]
-    # gripper_gt = gt_action[7]
     return np.sqrt(pos_mse), 0, 0
 
 

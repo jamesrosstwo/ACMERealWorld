@@ -1,34 +1,22 @@
-import io
-import logging
 import select
 import shutil
 import sys
 import traceback
 import time
-from collections import deque
+import threading
 from pathlib import Path
-from typing import Callable, List, Dict
-
-import torch.nn.functional as F
-
-from pathlib import Path
-from PIL import Image
+from typing import List
 
 import hydra
 import numpy as np
-import requests
 import torch
 import yaml
 from omegaconf import DictConfig, OmegaConf
-import plotly.graph_objects as go
 
 from client.eval.rsi import EvalRSI
 from client.eval.writer import EvalWriter
 from client.eval.policy import EvalPolicyInterface
 from client.nuc import NUCInterface
-from client.realsense import RealSenseInterface, enumerate_devices
-import pyrealsense2 as rs
-import threading
 
 
 def get_latest_ep_path(base_episodes_path: Path, prefix: str):
@@ -49,7 +37,7 @@ def listen_for_keypress(cancel_event):
             key = sys.stdin.read(1)
             if key.lower() == 'c':
                 cancel_event.set()
-                print("\nEpisode cancelled by user (keypress 'x').")
+                print("\nEpisode cancelled by user (keypress 'c').")
 
 
 def start_control_loop(
@@ -73,11 +61,6 @@ def start_control_loop(
         gripper_force = np.zeros((policy.obs_history_size, 1))
         eef_pos[:, -1] = 0
 
-        # action = policy(
-        #     static_view=resized_frames[0].unsqueeze(0),
-        #     wrist_view=resized_frames[1].unsqueeze(0),
-        # )
-
         desired_eef_pos, desired_eef_quat, desired_gripper_force = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
             rgb_1=resized_frames[1].unsqueeze(0),
@@ -94,7 +77,6 @@ def start_control_loop(
         desired_eef_quat = torch.zeros((horizon_len, 4))
         desired_eef_quat[:] = torch.from_numpy(home_eef_rot)
         desired_eef_quat = desired_eef_quat.to(torch.float64)
-        # print(eef_pos, "->", desired_eef_pos[:, :3])
         writer.on_inference(
             ee_pos=eef_pos,
             ee_quat=eef_rot,
@@ -109,7 +91,6 @@ def start_control_loop(
             time.sleep(per_step_sleep)
         time.sleep(2 * per_step_sleep)
         eef_pos = nuc.get_robot_state()["ee_pos"]
-        # print(f"\tPositional Error: {(eef_pos - desired_eef_pos[-1].numpy()) * 100} cm")
 
     def _loop_runner():
         while not stop_event.is_set():
@@ -209,7 +190,7 @@ def main(cfg: DictConfig):
                 elif ep_control_cmd == "z":
                     break
 
-        try:
+        if len(successes) > 0:
             stats_path = out_path / "stats.yaml"
             stats_path.unlink(missing_ok=True)
             stats = dict(
@@ -220,8 +201,6 @@ def main(cfg: DictConfig):
 
             with open(stats_path, 'w') as f:
                 yaml.dump(stats, f)
-        except ZeroDivisionError:
-            continue
 
 
 if __name__ == "__main__":
