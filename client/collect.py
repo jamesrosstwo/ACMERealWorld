@@ -11,18 +11,9 @@ from omegaconf import DictConfig
 from client.nuc import NUCInterface
 from client.realsense import RealSenseInterface
 from client.teleop import GELLOInterface
+from client.utils import get_latest_ep_path
 from client.write import ACMEWriter
 
-
-def get_latest_ep_path(base_episodes_path: Path, prefix: str):
-    ep_idxs = [int(x.stem.split("_")[-1]) for x in base_episodes_path.iterdir()]
-    ep_idx = 0
-    if len(ep_idxs) > 0:
-        ep_idx = max(ep_idxs) + 1
-    current_episode_name = f"{prefix}_{ep_idx}"
-    ep_path = base_episodes_path / current_episode_name
-    ep_path.mkdir(exist_ok=False)
-    return ep_path
 
 def start_control(gello: GELLOInterface, nuc: NUCInterface):
     state = nuc.get_robot_state()

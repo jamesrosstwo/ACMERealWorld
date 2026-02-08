@@ -9,6 +9,8 @@ import zarr
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
+from client.utils import get_latest_ep_path
+
 
 class KalibrWriter:
     class _CaptureWriter:
@@ -40,14 +42,7 @@ class KalibrWriter:
                  captures: DictConfig):
         self._base_episodes_path = Path(episodes_path)
         self._base_episodes_path.mkdir(exist_ok=True, parents=True)
-
-        ep_idxs = [int(x.stem.split("_")[-1]) for x in self._base_episodes_path.iterdir()]
-        ep_idx = 0
-        if len(ep_idxs) > 0:
-            ep_idx = max(ep_idxs) + 1
-        current_episode_name = f"calibration_{ep_idx}"
-        self.path = self._base_episodes_path / current_episode_name
-        self.path.mkdir(exist_ok=False)
+        self.path = get_latest_ep_path(self._base_episodes_path, prefix="calibration")
 
         with open(self.path / "target.yaml", "w") as f:
             target_dict = OmegaConf.to_container(target, resolve=True)

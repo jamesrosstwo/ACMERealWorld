@@ -116,7 +116,7 @@ def main(cfg: DictConfig) -> None:
     sample_horizon = cfg.sample_horizon
 
     timestamp = int(time.time())
-    out_path = Path(f"/home/rvl_root/Desktop/ACMERealWorld/outputs/offline_eval/{timestamp}")
+    out_path = Path(f"../outputs/offline_eval/{timestamp}")
     out_path.mkdir(parents=True, exist_ok=True)
     print(out_path.resolve())
 
