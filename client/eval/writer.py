@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 from typing import Dict, List
 import numpy as np
@@ -150,15 +151,20 @@ class EvalWriter:
         self.path = path
         assert self.path.exists()
         self._max_episode_len = max_episode_len
+        self._states_lock = threading.Lock()
         self.states = []
         self.inferences = []
         self._state_keys = ["qpos", "qvel", "ee_pos", "ee_rot", "gripper_force", "action"]
         self._inference_keys = ["ee_pos", "ee_quat", "gripper_force", "desired_ee_pos", "desired_ee_quat", "desired_gripper_force"]
 
+    def get_states_snapshot(self):
+        with self._states_lock:
+            return list(self.states)
 
     def on_state_update(self, new_state):
         assert all([k in new_state for k in self._state_keys])
-        self.states.append(new_state)
+        with self._states_lock:
+            self.states.append(new_state)
 
     def on_inference(self, **inference: np.ndarray):
         assert all([k in inference for k in self._inference_keys])

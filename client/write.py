@@ -153,95 +153,96 @@ class ACMEWriter:
         self._state_write_counter += 1
 
     def flush(self):
-        try:
-            # We write state on the fly, only captures require flushing at the end of the collection
-            all_rgb_ts = [c.col_tmstmps[:c.highest_written_index] for c in self._captures]
-            all_depth_ts = [c.depth_tmstmps[:c.highest_written_index] for c in self._captures]
+        # We write state on the fly, only captures require flushing at the end of the collection
+        empty_captures = [i for i, c in enumerate(self._captures) if c.highest_written_index == 0]
+        if empty_captures:
+            print(f"Warning: captures {empty_captures} have no frames, skipping flush")
+            return
 
-            t0 = max(
-                max(ts[0] for ts in all_rgb_ts),
-                max(ts[0] for ts in all_depth_ts)
-            )
-            t1 = min(
-                min(ts[-1] for ts in all_rgb_ts),
-                min(ts[-1] for ts in all_depth_ts)
-            )
+        all_rgb_ts = [c.col_tmstmps[:c.highest_written_index] for c in self._captures]
+        all_depth_ts = [c.depth_tmstmps[:c.highest_written_index] for c in self._captures]
 
-            ref_ts = all_rgb_ts[0]
-            ref_ts = ref_ts[(ref_ts >= t0) & (ref_ts <= t1)]
-            sync_len = len(ref_ts)
+        t0 = max(
+            max(ts[0] for ts in all_rgb_ts),
+            max(ts[0] for ts in all_depth_ts)
+        )
+        t1 = min(
+            min(ts[-1] for ts in all_rgb_ts),
+            min(ts[-1] for ts in all_depth_ts)
+        )
 
-            global_synced = []
-            for cap in self._captures:
-                depth_frames = cap._depth_cache[:cap.highest_written_index]
-                rgb_frames = cap._rgb_cache[:cap.highest_written_index]
-                depth_ts = cap.depth_tmstmps[:cap.highest_written_index]
-                rgb_ts = cap.col_tmstmps[:cap.highest_written_index]
+        ref_ts = all_rgb_ts[0]
+        ref_ts = ref_ts[(ref_ts >= t0) & (ref_ts <= t1)]
+        sync_len = len(ref_ts)
 
-                synced_rgb_frames = []
-                synced_depth_frames = []
-                synced_timestamps = []
+        global_synced = []
+        for cap in self._captures:
+            depth_frames = cap._depth_cache[:cap.highest_written_index]
+            rgb_frames = cap._rgb_cache[:cap.highest_written_index]
+            depth_ts = cap.depth_tmstmps[:cap.highest_written_index]
+            rgb_ts = cap.col_tmstmps[:cap.highest_written_index]
 
-                t_idx = 0
-                for t in ref_ts:
-                    while (t_idx + 1 < len(rgb_ts) and
-                           abs(rgb_ts[t_idx + 1] - t) < abs(rgb_ts[t_idx] - t)):
-                        t_idx += 1
+            synced_rgb_frames = []
+            synced_depth_frames = []
+            synced_timestamps = []
 
-                    synced_rgb_frames.append(rgb_frames[t_idx])
-                    # Assume depth and rgb are captured simultaneously (usually <1ms off in practice)
-                    synced_depth_frames.append(depth_frames[t_idx])
-                    synced_timestamps.append(rgb_ts[t_idx])
+            t_idx = 0
+            for t in ref_ts:
+                while (t_idx + 1 < len(rgb_ts) and
+                       abs(rgb_ts[t_idx + 1] - t) < abs(rgb_ts[t_idx] - t)):
+                    t_idx += 1
 
-                global_synced.append((cap, synced_rgb_frames, synced_depth_frames, synced_timestamps))
+                synced_rgb_frames.append(rgb_frames[t_idx])
+                # Assume depth and rgb are captured simultaneously (usually <1ms off in practice)
+                synced_depth_frames.append(depth_frames[t_idx])
+                synced_timestamps.append(rgb_ts[t_idx])
 
-            for cap, rgb_frames, depth_frames, synced_timestamps in global_synced:
-                # depth
-                zarr.array(np.array(depth_frames, dtype=np.int16),
-                           chunks=(16, None, None),
-                           dtype=np.int16,
-                           store=cap._depth_store)
+            global_synced.append((cap, synced_rgb_frames, synced_depth_frames, synced_timestamps))
 
-                # rgb
-                fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                rgb_out = cv2.VideoWriter(str(cap._rgb_path), fourcc, cap._fps,
-                                          (int(cap._frame_width), int(cap._frame_height)), True)
-                for frame in rgb_frames:
-                    rgb_out.write(frame)
-                rgb_out.release()
+        for cap, rgb_frames, depth_frames, synced_timestamps in global_synced:
+            # depth
+            zarr.array(np.array(depth_frames, dtype=np.int16),
+                       chunks=(16, None, None),
+                       dtype=np.int16,
+                       store=cap._depth_store)
 
-                # timestamps
-                with open(str(cap._path / "timestamps.npy"), "wb") as f:
-                    np.savez(f, np.asarray(synced_timestamps))
+            # rgb
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            rgb_out = cv2.VideoWriter(str(cap._rgb_path), fourcc, cap._fps,
+                                      (int(cap._frame_width), int(cap._frame_height)), True)
+            for frame in rgb_frames:
+                rgb_out.write(frame)
+            rgb_out.release()
 
-            state = zarr.open_group(str(self.path / "episode.zarr"), mode="r+")
-            orig_len = len(next(iter(state.values())))
-            # Aligns timesteps when some cameras are slightly slower
-            if orig_len != sync_len:
-                orig_idx = np.linspace(0, 1, orig_len)
-                new_idx = np.linspace(0, 1, sync_len)
-                for key, arr in list(state.items()):
-                    data = np.array(arr)
+            # timestamps
+            with open(str(cap._path / "timestamps.npy"), "wb") as f:
+                np.savez(f, np.asarray(synced_timestamps))
 
-                    state.create_dataset(f"{key}_original", data=data)
-                    del state[key]
+        state = zarr.open_group(str(self.path / "episode.zarr"), mode="r+")
+        orig_len = len(next(iter(state.values())))
+        # Aligns timesteps when some cameras are slightly slower
+        if orig_len != sync_len:
+            orig_idx = np.linspace(0, 1, orig_len)
+            new_idx = np.linspace(0, 1, sync_len)
+            for key, arr in list(state.items()):
+                data = np.array(arr)
 
-                    if data.ndim == 1:
-                        interp = np.interp(new_idx, orig_idx, data)
-                    else:
-                        interp = np.empty((sync_len,) + data.shape[1:], dtype=data.dtype)
-                        for j in range(data.shape[1]):
-                            interp[:, j] = np.interp(new_idx, orig_idx, data[:, j])
+                state.create_dataset(f"{key}_original", data=data)
+                del state[key]
 
-                    state.create_dataset(f"{key}", data=interp)
+                if data.ndim == 1:
+                    interp = np.interp(new_idx, orig_idx, data)
+                else:
+                    interp = np.empty((sync_len,) + data.shape[1:], dtype=data.dtype)
+                    for j in range(data.shape[1]):
+                        interp[:, j] = np.interp(new_idx, orig_idx, data[:, j])
 
-            metadata = dict(
-                n_timesteps=sync_len,
-                instruction=self.instruction,
-                dynamic_captures=[5]
-            )
-            with open(self.episode_path / "metadata.yaml", "w") as f:
-                yaml.dump(metadata, f)
+                state.create_dataset(f"{key}", data=interp)
 
-        except IndexError:
-            pass
+        metadata = dict(
+            n_timesteps=sync_len,
+            instruction=self.instruction,
+            dynamic_captures=[5]
+        )
+        with open(self.episode_path / "metadata.yaml", "w") as f:
+            yaml.dump(metadata, f)

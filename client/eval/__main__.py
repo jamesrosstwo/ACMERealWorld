@@ -41,7 +41,7 @@ def start_control_loop(
         frames: List[torch.Tensor] = realsense.get_rgb_obs()
         resized_frames = [policy.preprocess_frame(f) for f in frames]
         # TODO:  A little weird this goes through the writer, but whatever
-        all_states = list(writer.states)
+        all_states = writer.get_states_snapshot()
         eef_pos = np.stack([s["ee_pos"] for s in all_states[-policy.obs_history_size:]])
         eef_rot = np.stack([s["ee_rot"] for s in all_states[-policy.obs_history_size:]])
 
@@ -120,12 +120,11 @@ def record_episode(cfg, ep_path, nuc, policy):
         keypress_thread = threading.Thread(target=listen_for_keypress, args=(cancel_event,), daemon=True)
         keypress_thread.start()
 
-        for i in range(rsi.n_cameras):
-            rsi.frame_counts[i] = 0
-        while any([c < cfg.max_episode_timesteps for c in rsi.frame_counts.values()]):
+        rsi.reset_frame_counts()
+        while any([c < cfg.max_episode_timesteps for c in rsi.get_frame_counts().values()]):
             time.sleep(2.0)
             print("Episode progress:",
-                  np.array(list(rsi.frame_counts.values())) / cfg.max_episode_timesteps)
+                  np.array(list(rsi.get_frame_counts().values())) / cfg.max_episode_timesteps)
             # Check for the cancel event (keypress 'c' to cancel)
             if cancel_event.is_set():
                 print("Episode stopped by user.")

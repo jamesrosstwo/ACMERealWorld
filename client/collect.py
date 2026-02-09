@@ -59,11 +59,10 @@ def main(cfg: DictConfig):
                         episode_writer.write_state(action=current_action, **state)
 
                 rs_interface.start_capture(on_receive_frame)
-                for i in range(rs_interface.n_cameras):
-                    rs_interface.frame_counts[i] = 0
-                while any([c < cfg.max_episode_timesteps for c in rs_interface.frame_counts.values()]):
+                rs_interface.reset_frame_counts()
+                while any([c < cfg.max_episode_timesteps for c in rs_interface.get_frame_counts().values()]):
                     time.sleep(2.0)
-                    print("Episode progress:", np.array(list(rs_interface.frame_counts.values())) / cfg.max_episode_timesteps)
+                    print("Episode progress:", np.array(list(rs_interface.get_frame_counts().values())) / cfg.max_episode_timesteps)
             episode_writer.flush()
         except Exception as e:
             print(e)

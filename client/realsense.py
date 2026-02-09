@@ -99,7 +99,7 @@ class RealSenseInterface:
     def n_cameras(self):
         return len(self._pipelines)
 
-    def __init__(self, path: Path, n_frames: int, width: int, height: int, fps: int, init=True):
+    def __init__(self, path: Path = None, *, n_frames: int, width: int, height: int, fps: int, init=True):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self._path = path
         self._n_frames = n_frames
@@ -107,58 +107,14 @@ class RealSenseInterface:
         self._height = height
         self._fps = fps
         self._all_intr = []
+        self._recording_bagpaths = []
+        self._counts_lock = threading.Lock()
         if init:
-            self._pipelines, self._recording_bagpaths = self._initialize_cameras()
+            self._pipelines = self._initialize_cameras()
             self._stop_events = []
             self._threads = []
             self._start_indices = []
             self.frame_counts = {i: 0 for i in range(len(self._pipelines))}
-
-
-    def start_capture(self, on_receive_frame: Callable = None):
-        def _callback_wrapper(cap_idx):
-            if on_receive_frame is not None:
-                on_receive_frame(cap_idx)
-            self.frame_counts[cap_idx] += 1
-            if self.frame_counts[cap_idx] >= self._n_frames:
-                print("stopping capture", cap_idx)
-                self.stop_capture(cap_idx)
-
-        for idx, (pipe, cfg) in enumerate(self._pipelines):
-            stop_event = threading.Event()
-            profile = pipe.start(cfg)
-
-            dep = profile.get_stream(rs.stream.depth)
-            i = dep.as_video_stream_profile().get_intrinsics()
-
-
-            intr_vals = i.fx, i.fy, i.ppx, i.ppy
-            print(f"Camera {idx} intrinsics: {intr_vals})")
-            self._all_intr.append(np.asarray(intr_vals))
-
-            col_sensor = profile.get_device().query_sensors()[1]
-            col_sensor.set_option(rs.option.exposure, 250)
-            col_sensor.set_option(rs.option.gain, 128)
-            t = self._FrameGrabberThread(idx, pipe, _callback_wrapper, stop_event)
-            t.start()
-            self._threads.append(t)
-            self._stop_events.append(stop_event)
-
-        intrinsics_path = self._path / "intrinsics.npy"
-        np.save(intrinsics_path, np.stack(self._all_intr))
-
-    def create_pipeline(self, serial: str, w: int, h: int, fps: int):
-        tmp_path = str(self._path / f"{serial}.bag")
-
-        cfg = rs.config()
-        cfg.enable_device(serial)
-        cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
-        cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
-
-        cfg.enable_record_to_file(tmp_path)
-
-        pipe = rs.pipeline()
-        return pipe, cfg, tmp_path
 
     def _initialize_cameras(self):
         cameras = enumerate_devices()
@@ -171,15 +127,77 @@ class RealSenseInterface:
             print(f"   Camera {idx}: {serial}  ({product})")
 
         pipelines = []
-        bagpaths = []
         for idx, (serial, _) in enumerate(cameras):
-            pipe, cfg, bagpath = self.create_pipeline(serial, self._width, self._height, self._fps)
+            pipe, cfg = self.create_pipeline(serial, self._width, self._height, self._fps)
             pipelines.append((pipe, cfg))
-            bagpaths.append(bagpath)
 
         print("Waiting for cameras to start..")
         time.sleep(8.0)
-        return pipelines, bagpaths
+        return pipelines
+
+    def create_pipeline(self, serial: str, w: int, h: int, fps: int):
+        cfg = rs.config()
+        cfg.enable_device(serial)
+        cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
+        cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
+
+        if self._path is not None:
+            tmp_path = str(self._path / f"{serial}.bag")
+            cfg.enable_record_to_file(tmp_path)
+            self._recording_bagpaths.append(tmp_path)
+
+        pipe = rs.pipeline()
+        return pipe, cfg
+
+    def _on_pipeline_started(self, idx, profile):
+        dep = profile.get_stream(rs.stream.depth)
+        i = dep.as_video_stream_profile().get_intrinsics()
+        intr_vals = i.fx, i.fy, i.ppx, i.ppy
+        print(f"Camera {idx} intrinsics: {intr_vals})")
+        self._all_intr.append(np.asarray(intr_vals))
+
+    def _on_all_pipelines_started(self):
+        if self._path is not None and self._all_intr:
+            intrinsics_path = self._path / "intrinsics.npy"
+            np.save(intrinsics_path, np.stack(self._all_intr))
+
+    def _create_frame_thread(self, idx, pipe, callback, stop_event):
+        return self._FrameGrabberThread(idx, pipe, callback, stop_event)
+
+    def start_capture(self, on_receive_frame: Callable = None):
+        def _callback_wrapper(cap_idx):
+            if on_receive_frame is not None:
+                on_receive_frame(cap_idx)
+            with self._counts_lock:
+                self.frame_counts[cap_idx] += 1
+                if self.frame_counts[cap_idx] >= self._n_frames:
+                    print("stopping capture", cap_idx)
+                    self.stop_capture(cap_idx)
+
+        for idx, (pipe, cfg) in enumerate(self._pipelines):
+            stop_event = threading.Event()
+            profile = pipe.start(cfg)
+
+            self._on_pipeline_started(idx, profile)
+
+            col_sensor = profile.get_device().query_sensors()[1]
+            col_sensor.set_option(rs.option.exposure, 250)
+            col_sensor.set_option(rs.option.gain, 128)
+            t = self._create_frame_thread(idx, pipe, _callback_wrapper, stop_event)
+            t.start()
+            self._threads.append(t)
+            self._stop_events.append(stop_event)
+
+        self._on_all_pipelines_started()
+
+    def get_frame_counts(self):
+        with self._counts_lock:
+            return dict(self.frame_counts)
+
+    def reset_frame_counts(self):
+        with self._counts_lock:
+            for k in self.frame_counts:
+                self.frame_counts[k] = 0
 
     def stop_capture(self, capture_idx: int):
         self._stop_events[capture_idx].set()
