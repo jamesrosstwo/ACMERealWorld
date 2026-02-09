@@ -2,24 +2,21 @@ name: ACMEReal
 channels:
   - defaults
   - pytorch
-  - fair-robotics
-  - aihabitat
   - conda-forge
 dependencies:
-  - python=3.8
-  - polymetis
+  - python=3.10
   - zarr
   - tqdm
   - h5py
-  - Flask
-  - docker-py
   - blosc
   - librealsense
   - Pillow
   - hydra-core
-  - paramiko
+  - scipy
   - pip
   - pip:
       - opencv-contrib-python
       - pyrealsense2
+      - panda-python
+      - torch
 

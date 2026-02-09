@@ -12,16 +12,10 @@ writer:
 nuc:
   ip: "192.168.1.106"
   franka_ip: "192.168.1.107"
-  home_pos: [0.425, -0.375, 0.38]
-  home_rot: [0.942, 0.336, 0, 0]
+  home_pos: [0.30582778, 0., 0.48467681]
+  home_rot: [1., 0., 0., 0.]
   server:
-    ip: ${nuc.ip}
-    port: 22
-    robot_port: 50051
-    gripper_port: 50052
-    user: ${env:NUC_USER}
-    pwd: ${env:NUC_PWD}
-    conda: "/home/james/anaconda3"
+    gripper_hysteresis: 0.1
 
 realsense:
   n_frames: ${max_episode_timesteps}

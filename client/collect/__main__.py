@@ -36,10 +36,6 @@ def start_control(gello: GELLOInterface, nuc: NUCInterface):
 def action_step(gello: GELLOInterface, nuc: NUCInterface):
     joint_angles = gello.get_joint_angles()
     eef_pos, eef_rot = nuc.forward_kinematics(torch.tensor(joint_angles))
-
-    home_pos, home_rot = nuc.home
-    eef_pos[-1] = home_pos[-1]
-    eef_rot = home_rot
     gripper_force = np.zeros(1)
     nuc.send_control(eef_pos, eef_rot, None)
     action = np.concatenate([eef_pos, eef_rot, gripper_force])

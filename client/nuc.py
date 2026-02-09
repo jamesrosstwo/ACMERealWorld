@@ -1,111 +1,155 @@
 """NUC robot interface.
 
-Communicates with a Franka Panda robot arm via Polymetis running on an Intel NUC.
+Communicates with a Franka Panda robot arm via panda-py (libfranka).
 Provides end-effector Cartesian impedance control, forward kinematics, gripper
-commands, and robot state queries (joint positions/velocities, EE pose). The
-Polymetis server is launched over SSH.
+commands, and robot state queries (joint positions, EE pose).
 """
-import os
 import threading
 import time
 
 import numpy as np
-import polymetis_pb2
 import torch
 from omegaconf import DictConfig
-from polymetis import RobotInterface, GripperInterface
-import paramiko
+from scipy.spatial.transform import Rotation
+import panda_py
 
 
-def stream_output(stream, prefix=''):
-    for line in iter(stream.readline, ""):
-        print(f"{prefix}{line.strip()}")
+class GripperInterface:
+    def __init__(self, ip_address: str, hysteresis: float = 0.1):
+        print(f"Initializing GripperInterface via panda-py at {ip_address}")
+        self._gripper = panda_py.libfranka.Gripper(ip_address)
+
+        # Async state
+        self._thread = None
+        self._target_grasp_state = False  # False=Open, True=Grasped
+        self._hysteresis = hysteresis
+
+    def get_state(self):
+        state = self._gripper.read_once()
+        return GripperState(
+            width=state.width,
+            max_width=state.max_width,
+            is_grasped=state.is_grasped
+        )
+
+    def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
+        self._gripper.move(width=width, speed=speed)
+
+    def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
+        try:
+            return self._gripper.grasp(width=grasp_width, speed=speed, force=force)
+        except RuntimeError:
+            return False
+
+    def stop(self):
+        self._gripper.stop()
+
+    def close(self):
+        pass
+
+    def _do_grasp(self):
+        self.grasp(speed=0.1, force=10.0, blocking=True)
+
+    def _do_open(self):
+        mx = self.get_state().max_width
+        self.goto(width=mx, speed=0.1, blocking=True)
+
+    def act_async(self, gripper_val: float):
+        val = float(gripper_val)
+
+        grasp_threshold = 0.5 + self._hysteresis
+        open_threshold = 0.5 - self._hysteresis
+
+        if self._thread and self._thread.is_alive():
+            return
+
+        if val > grasp_threshold and not self._target_grasp_state:
+            self._target_grasp_state = True
+            self._thread = threading.Thread(target=self._do_grasp)
+            self._thread.start()
+        elif val < open_threshold and self._target_grasp_state:
+            self._target_grasp_state = False
+            self._thread = threading.Thread(target=self._do_open)
+            self._thread.start()
+
+
+class GripperState:
+    def __init__(self, width: float, max_width: float, is_grasped: bool):
+        self.width = width
+        self.max_width = max_width
+        self.is_grasped = is_grasped
 
 
 class NUCInterface:
-    def _launch_server(self, conda, ip, port, user, pwd):
-        c = f"{conda}/bin/conda"
-        launch = f"{conda}/envs/nuc_polymetis_server/bin/launch_robot.py"
-        launch_dir = os.path.dirname(launch)
-
-        cmd = (
-            f"cd {launch_dir} && "
-            f"sudo -S {c} run -n nuc_polymetis_server python launch_robot.py "
-            f"robot_client=franka_hardware robot_client.executable_cfg.robot_ip=\"{self._franka_ip}\""
-        )
-
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(
-            hostname=ip,
-            port=port,
-            username=user,
-            password=pwd,
-        )
-
-        stdin, stdout, stderr = client.exec_command(cmd)
-        stdin.write(pwd + "\n")
-
-        threading.Thread(target=stream_output, args=(stdout,), daemon=True).start()
-        threading.Thread(target=stream_output, args=(stderr, '[ERR] '), daemon=True).start()
-
-        return client
-
     @property
     def home(self):
         return self._home_pos.copy(), self._home_rot.copy()
 
     def __init__(self, ip: str, server: DictConfig, franka_ip: str,
-                 home_pos=(0.425, -0.375, 0.38), home_rot=(0.942, 0.336, 0, 0)):
+                 home_pos=(0.30582778, 0., 0.48467681), home_rot=(1., 0., 0., 0.)):
         self._franka_ip = franka_ip
         self._nuc_ip = ip
         self._server_cfg = server
         self._home_pos = np.array(home_pos)
         self._home_rot = np.array(home_rot)
-        self._last_gripper_state = False
 
-        self._robot = RobotInterface(
-            ip_address=self._nuc_ip,
-        )
+        print(f"Connecting to Panda at {self._franka_ip}")
+        self._panda = panda_py.Panda(self._franka_ip)
+        self._controller = None
 
-        self._gripper = GripperInterface(
-            ip_address=self._nuc_ip,
-            port= self._server_cfg.gripper_port
-        )
+        hysteresis = getattr(server, 'gripper_hysteresis', 0.1)
+        self._gripper = GripperInterface(self._franka_ip, hysteresis=hysteresis)
 
-        self._desired_eef_pos, self._desired_eef_rot = self.home
+        self._desired_eef_pos = self._panda.get_position()
+        self._desired_eef_rot = self._panda.get_orientation(scalar_first=False)
 
     def get_desired_ee_pose(self):
         return np.concatenate([self._desired_eef_pos, self._desired_eef_rot]).copy()
 
     def get_robot_state(self):
-        qpos = self._robot.get_joint_positions()
-        qvel = self._robot.get_joint_velocities()
-        ee_pos, ee_rot = self._robot.get_ee_pose()
-        state = dict(qpos=qpos, qvel=qvel, ee_pos=ee_pos, ee_rot=ee_rot, gripper_force=torch.zeros(1))
-        return {k: v.detach().cpu().numpy() for k, v in state.items()}
+        R = self._panda.get_pose()[:3, :3]
+        t = self._panda.get_position()
+        ee_rot = Rotation.from_matrix(R).as_quat()  # xyzw
+        return dict(qpos=self._panda.q, ee_pos=t, ee_rot=ee_rot, gripper_force=np.zeros(1))
 
     def forward_kinematics(self, joint_positions: torch.Tensor):
-        return tuple([x.cpu().numpy() for x in self._robot.robot_model.forward_kinematics(joint_positions)])
+        q = joint_positions.cpu().numpy().reshape(7, 1)
+        try:
+            pose = panda_py.fk(q)
+            mat = np.array(pose).reshape(4, 4)
+            pos = mat[:3, 3]
+            rot = Rotation.from_matrix(mat[:3, :3]).as_quat()
+            return pos, rot
+        except AttributeError:
+            print("WARNING: forward_kinematics (panda_py.fk) not found/working")
+            return np.zeros(3), np.array([1, 0, 0, 0])
 
     def send_control(self, eef_pos: np.ndarray, eef_rot: np.ndarray, gripper: np.ndarray):
         self._desired_eef_pos = eef_pos.copy()
         self._desired_eef_rot = eef_rot.copy()
-        self.send_control_tensor(torch.tensor(eef_pos), torch.tensor(eef_rot), None)
+        if self._controller:
+            self._controller.set_control(eef_pos, eef_rot)
+
+        if gripper is not None:
+            g_val = gripper.item() if hasattr(gripper, 'item') else float(gripper)
+            self._gripper.act_async(g_val)
 
     def send_control_tensor(self, eef_pos: torch.Tensor, eef_rot: torch.Tensor, gripper: torch.Tensor):
-        self._robot.update_desired_ee_pose(eef_pos, eef_rot)
+        g = gripper.cpu().numpy() if gripper is not None else None
+        self.send_control(eef_pos.cpu().numpy(), eef_rot.cpu().numpy(), g)
 
     def reset(self):
-        current_ee_pos, current_ee_rot = self._robot.get_ee_pose()
-        self._robot.move_to_ee_pose(current_ee_pos + torch.tensor([0, 0, 0.15]))
-        # PUSH T FREEZES
-        self._robot.move_to_ee_pose(*self.home)
-        self._gripper.grasp(speed=0.01, force=1, blocking=True)
-        print("Grasping")
+        self._panda.move_to_start()
+        time.sleep(10)
 
     def start(self):
-        self._robot.start_cartesian_impedance()
+        try:
+            from panda_py import controllers
+            self._controller = controllers.CartesianImpedance()
+            self._panda.start_controller(self._controller)
+        except ImportError:
+            print("ERROR: panda_py.controllers not found. Control will not work.")
 
     def close(self):
-        pass
+        if self._controller:
+            self._panda.stop_controller()
