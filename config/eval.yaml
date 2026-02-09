@@ -1,5 +1,6 @@
 defaults:
   - policy: default
+  - task: pusht
 
 max_episode_timesteps: 4000
 start_index: 0

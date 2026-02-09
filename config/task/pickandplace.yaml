@@ -1,0 +1,6 @@
+instruction: "Pick up the object and place it at the target location"
+
+# Full 6-DOF control with gripper actuation for pick-and-place.
+freeze_z: false
+freeze_rotation: false
+freeze_gripper: false

@@ -1,3 +1,6 @@
+defaults:
+  - task: pusht
+
 max_episode_timesteps: 500
 episodes_path: "/mnt/ssd/james/episodes"
 
@@ -17,7 +20,7 @@ realsense:
 
 writer:
   max_episode_len: ${max_episode_timesteps}
-  instruction: "Push the green T shape into the black outline of the T shape on the table"
+  instruction: ${task.instruction}
   captures:
     frame_width: ${realsense.width}
     frame_height: ${realsense.height}

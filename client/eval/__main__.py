@@ -45,6 +45,7 @@ def start_control_loop(
         realsense: EvalRealsense,
         writer: EvalWriter,
         nuc: NUCInterface,
+        task_cfg: DictConfig,
 ):
     stop_event = threading.Event()
 
@@ -58,8 +59,10 @@ def start_control_loop(
 
         cur_eef_pos = nuc.get_robot_state()["ee_pos"]
         print(f"\tInput positional error: {(cur_eef_pos - eef_pos[-1]) * 100}cm")
+
         gripper_force = np.zeros((policy.obs_history_size, 1))
-        eef_pos[:, -1] = 0
+        if task_cfg.freeze_z:
+            eef_pos[:, -1] = 0
 
         desired_eef_pos, desired_eef_quat, desired_gripper_force = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
@@ -69,14 +72,17 @@ def start_control_loop(
             gripper_force=np.expand_dims(gripper_force, 0)
         )
 
-
         horizon_len = desired_eef_pos.shape[0]
         home_eef_pos, home_eef_rot = nuc.home
-        desired_eef_pos[:, -1] = home_eef_pos[-1]
         desired_eef_pos = desired_eef_pos.to(torch.float64)
-        desired_eef_quat = torch.zeros((horizon_len, 4))
-        desired_eef_quat[:] = torch.from_numpy(home_eef_rot)
         desired_eef_quat = desired_eef_quat.to(torch.float64)
+
+        if task_cfg.freeze_z:
+            desired_eef_pos[:, -1] = home_eef_pos[-1]
+        if task_cfg.freeze_rotation:
+            desired_eef_quat = torch.zeros((horizon_len, 4), dtype=torch.float64)
+            desired_eef_quat[:] = torch.from_numpy(home_eef_rot)
+
         writer.on_inference(
             ee_pos=eef_pos,
             ee_quat=eef_rot,
@@ -87,7 +93,8 @@ def start_control_loop(
         )
         per_step_sleep = 1.0 / (policy.control_frequency * horizon_len)
         for i in range(horizon_len):
-            nuc.send_control_tensor(desired_eef_pos[i], desired_eef_quat[i], None)
+            gripper_cmd = None if task_cfg.freeze_gripper else desired_gripper_force[i]
+            nuc.send_control_tensor(desired_eef_pos[i], desired_eef_quat[i], gripper_cmd)
             time.sleep(per_step_sleep)
         time.sleep(2 * per_step_sleep)
         eef_pos = nuc.get_robot_state()["ee_pos"]
@@ -126,7 +133,7 @@ def record_episode(cfg, ep_path, nuc, policy):
 
         nuc.start()
 
-        stop_control = start_control_loop(policy, rsi, writer, nuc)
+        stop_control = start_control_loop(policy, rsi, writer, nuc, cfg.task)
 
         cancel_event = threading.Event()
         keypress_thread = threading.Thread(target=listen_for_keypress, args=(cancel_event,), daemon=True)

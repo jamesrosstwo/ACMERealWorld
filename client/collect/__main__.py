@@ -33,11 +33,14 @@ def start_control(gello: GELLOInterface, nuc: NUCInterface):
 
 
 
-def action_step(gello: GELLOInterface, nuc: NUCInterface):
+def action_step(gello: GELLOInterface, nuc: NUCInterface, task_cfg: DictConfig):
     joint_angles = gello.get_joint_angles()
     eef_pos, eef_rot = nuc.forward_kinematics(torch.tensor(joint_angles))
+
     gripper_force = np.zeros(1)
-    nuc.send_control(eef_pos, eef_rot, None)
+    gripper_cmd = None if task_cfg.freeze_gripper else gripper_force
+
+    nuc.send_control(eef_pos, eef_rot, gripper_cmd)
     action = np.concatenate([eef_pos, eef_rot, gripper_force])
     return action
 
@@ -63,7 +66,7 @@ def main(cfg: DictConfig):
                         # for episode collection we just assume all cameras are synchronized to the
                         # primary camera, and that this synchronous operation of getting robot state
                         # from the NUC takes no time.
-                        current_action = action_step(gello, nuc)
+                        current_action = action_step(gello, nuc, cfg.task)
                         episode_writer.write_state(action=current_action, **state)
 
                 rs_interface.start_capture(on_receive_frame)
