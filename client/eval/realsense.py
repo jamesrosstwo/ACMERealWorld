@@ -1,3 +1,10 @@
+"""Evaluation-mode RealSense interface.
+
+:class:`EvalRealsense` is a specialized subclass of
+:class:`~client.realsense.RealSenseInterface` that captures only RGB frames
+(no depth or bag recording) and caches recent observations in a fixed-size
+deque for low-latency policy inference.
+"""
 import threading
 import traceback
 from collections import deque
@@ -10,7 +17,7 @@ import pyrealsense2 as rs
 from client.realsense import RealSenseInterface, enumerate_devices
 
 
-class EvalRSI(RealSenseInterface):
+class EvalRealsense(RealSenseInterface):
     class _FrameGrabberThread(threading.Thread):
         def __init__(self, serial, pipe, callback, stop_event, cache_size=2):
             super().__init__()

@@ -1,3 +1,10 @@
+"""Intel RealSense multi-camera capture and bag file playback.
+
+Provides :class:`RealSenseInterface` for live multi-camera RGB-D capture with
+per-camera threading and automatic bag file recording, and :class:`RSBagProcessor`
+for offline playback of recorded ``.bag`` files during postprocessing. Cameras
+are identified by serial number throughout.
+"""
 import threading
 import time
 import traceback

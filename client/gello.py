@@ -1,3 +1,9 @@
+"""GELLO teleoperation interface.
+
+Reads joint angles from a GELLO controller (Dynamixel servo-based input device)
+and maps them to Franka Panda joint space for teleoperated demonstration collection.
+Handles joint sign conventions, zero-point calibration, and gripper state.
+"""
 from dataclasses import dataclass
 from typing import Tuple, List
 

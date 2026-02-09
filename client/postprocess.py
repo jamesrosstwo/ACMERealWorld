@@ -1,3 +1,13 @@
+"""Episode postprocessing entry point.
+
+Decodes RealSense ``.bag`` files recorded during collection into synchronized
+multi-camera RGB video (MP4), depth arrays (zarr), and aligned timestamps.
+Resamples robot state to match the synchronized frame count.
+
+Usage::
+
+    python client/postprocess.py
+"""
 import shutil
 from pathlib import Path
 

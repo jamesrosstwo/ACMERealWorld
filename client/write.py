@@ -1,3 +1,10 @@
+"""Episode data writer.
+
+:class:`ACMEWriter` writes synchronized multi-camera RGB frames (MP4),
+depth maps (zarr), and robot state (zarr) for a single episode. During
+collection frames are buffered in memory; :meth:`ACMEWriter.flush` performs
+cross-camera temporal synchronization, encodes video, and writes metadata.
+"""
 from pathlib import Path
 from typing import Dict, List
 

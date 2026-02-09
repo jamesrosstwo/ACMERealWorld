@@ -1,3 +1,14 @@
+"""Episode data collection entry point.
+
+Orchestrates teleoperated demonstration recording by coordinating the GELLO
+controller, RealSense cameras, and Franka Panda robot. Each episode captures
+synchronized multi-camera RGB-D frames alongside robot state and operator actions,
+written to disk via :class:`~client.write.ACMEWriter`.
+
+Usage::
+
+    python client/collect.py
+"""
 import shutil
 import traceback
 import time

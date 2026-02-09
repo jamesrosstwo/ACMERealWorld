@@ -1,3 +1,9 @@
+"""Evaluation episode writer and trajectory visualization.
+
+:class:`EvalWriter` accumulates robot state and policy inference records during
+an evaluation episode, then generates interactive 3D trajectory plots (Plotly HTML)
+comparing end-effector positions against commanded actions.
+"""
 import threading
 from pathlib import Path
 from typing import Dict, List

@@ -1,3 +1,10 @@
+"""NUC robot interface.
+
+Communicates with a Franka Panda robot arm via Polymetis running on an Intel NUC.
+Provides end-effector Cartesian impedance control, forward kinematics, gripper
+commands, and robot state queries (joint positions/velocities, EE pose). The
+Polymetis server is launched over SSH.
+"""
 import os
 import threading
 import time

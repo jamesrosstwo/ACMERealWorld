@@ -1,3 +1,4 @@
+"""Shared utility functions for episode management."""
 from pathlib import Path
 
 

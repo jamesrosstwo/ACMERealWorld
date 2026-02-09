@@ -1,3 +1,10 @@
+"""Policy inference server client.
+
+:class:`EvalPolicyInterface` communicates with an HTTP policy server to obtain
+robot actions from camera observations and low-dimensional state. Handles frame
+preprocessing (BGR to RGB, resize, channel reordering) and serialization of
+observation tensors for network transfer.
+"""
 import io
 import logging
 

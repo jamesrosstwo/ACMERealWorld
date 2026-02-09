@@ -1,3 +1,14 @@
+"""Policy evaluation entry point.
+
+Runs a learned policy on the Franka Panda robot using RealSense camera
+observations. A threaded control loop queries the policy server for actions,
+sends them to the robot, and records episode trajectories with success/failure
+labels for computing evaluation metrics.
+
+Usage::
+
+    python -m client.eval
+"""
 import select
 import shutil
 import sys
@@ -13,7 +24,7 @@ import torch
 import yaml
 from omegaconf import DictConfig, OmegaConf
 
-from client.eval.rsi import EvalRSI
+from client.eval.realsense import EvalRealsense
 from client.eval.writer import EvalWriter
 from client.eval.policy import EvalPolicyInterface
 from client.nuc import NUCInterface
@@ -31,7 +42,7 @@ def listen_for_keypress(cancel_event):
 
 def start_control_loop(
         policy: EvalPolicyInterface,
-        realsense: EvalRSI,
+        realsense: EvalRealsense,
         writer: EvalWriter,
         nuc: NUCInterface,
 ):
@@ -96,7 +107,7 @@ def start_control_loop(
 
 
 def record_episode(cfg, ep_path, nuc, policy):
-    with EvalRSI(**cfg.realsense) as rsi:
+    with EvalRealsense(**cfg.realsense) as rsi:
         writer = EvalWriter(path=ep_path, **cfg.writer)
         nuc.reset()
 
