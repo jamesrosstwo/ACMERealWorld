@@ -7,8 +7,8 @@ episodes_path: "/mnt/ssd/james/episodes"
 nuc:
   ip: "192.168.1.106"
   franka_ip: "192.168.1.107"
-  home_pos: [0.30582778, 0., 0.48467681]
-  home_rot: [1., 0., 0., 0.]
+  home_pos: ${task.home_pos}
+  home_rot: ${task.home_rot}
   server:
     gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
 

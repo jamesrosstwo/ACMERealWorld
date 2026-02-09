@@ -49,6 +49,8 @@ def start_control_loop(
 ):
     stop_event = threading.Event()
 
+    pos_mask = np.array(list(task_cfg.pos_mask))
+
     def _loop_iter():
         frames: List[torch.Tensor] = realsense.get_rgb_obs()
         resized_frames = [policy.preprocess_frame(f) for f in frames]
@@ -61,8 +63,8 @@ def start_control_loop(
         print(f"\tInput positional error: {(cur_eef_pos - eef_pos[-1]) * 100}cm")
 
         gripper_force = np.zeros((policy.obs_history_size, 1))
-        if task_cfg.freeze_z:
-            eef_pos[:, -1] = 0
+        # Zero out frozen position dims in the observation
+        eef_pos[:, ~pos_mask] = 0
 
         desired_eef_pos, desired_eef_quat, desired_gripper_force = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
@@ -77,8 +79,9 @@ def start_control_loop(
         desired_eef_pos = desired_eef_pos.to(torch.float64)
         desired_eef_quat = desired_eef_quat.to(torch.float64)
 
-        if task_cfg.freeze_z:
-            desired_eef_pos[:, -1] = home_eef_pos[-1]
+        # Replace frozen position dims with home values
+        frozen = torch.from_numpy(~pos_mask)
+        desired_eef_pos[:, frozen] = torch.from_numpy(home_eef_pos)[frozen]
         if task_cfg.freeze_rotation:
             desired_eef_quat = torch.zeros((horizon_len, 4), dtype=torch.float64)
             desired_eef_quat[:] = torch.from_numpy(home_eef_rot)

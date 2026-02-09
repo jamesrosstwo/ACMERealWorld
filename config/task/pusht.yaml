@@ -1,8 +1,11 @@
 instruction: "Push the green T shape into the black outline of the T shape on the table"
 
-# Degrees of freedom to freeze (lock to home pose / zero in observations).
-# For planar pushing we constrain the robot to the table surface with a
-# fixed wrist orientation and no gripper actuation.
-freeze_z: true
+home_pos: [0.30582778, 0., 0.48467681]
+home_rot: [1., 0., 0., 0.]
+
+# Per-axis position mask: true = free (policy controls), false = frozen to home.
+# Frozen dims are zeroed in observations and replaced with home values in commands.
+pos_mask: [true, true, false]   # xy free, z locked to table height
+
 freeze_rotation: true
 freeze_gripper: true
