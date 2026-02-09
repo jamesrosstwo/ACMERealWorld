@@ -1,6 +1,8 @@
 """Client-side interfaces for the ACME robot learning data collection and evaluation system.
 
-Provides hardware interfaces (RealSense cameras, GELLO teleoperation, Franka Panda via NUC),
-episode data recording, and policy evaluation. The ``eval`` subpackage contains components
-specific to running learned policies on the robot.
+Shared hardware interfaces (:mod:`client.nuc`) and utilities (:mod:`client.utils`)
+live at the top level. The two core workflows are organized as subpackages:
+
+- :mod:`client.collect` — teleoperated demonstration recording and postprocessing
+- :mod:`client.eval` — policy evaluation on the robot
 """

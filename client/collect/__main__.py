@@ -3,11 +3,11 @@
 Orchestrates teleoperated demonstration recording by coordinating the GELLO
 controller, RealSense cameras, and Franka Panda robot. Each episode captures
 synchronized multi-camera RGB-D frames alongside robot state and operator actions,
-written to disk via :class:`~client.write.ACMEWriter`.
+written to disk via :class:`~client.collect.write.ACMEWriter`.
 
 Usage::
 
-    python client/collect.py
+    python -m client.collect
 """
 import shutil
 import traceback
@@ -20,10 +20,10 @@ import torch
 from omegaconf import DictConfig
 
 from client.nuc import NUCInterface
-from client.realsense import RealSenseInterface
-from client.gello import GELLOInterface
+from client.collect.realsense import RealSenseInterface
+from client.collect.gello import GELLOInterface
 from client.utils import get_latest_ep_path
-from client.write import ACMEWriter
+from client.collect.write import ACMEWriter
 
 
 def start_control(gello: GELLOInterface, nuc: NUCInterface):
@@ -46,7 +46,7 @@ def action_step(gello: GELLOInterface, nuc: NUCInterface):
     return action
 
 
-@hydra.main(config_path="../config", config_name="collect")
+@hydra.main(config_path="../../config", config_name="collect")
 def main(cfg: DictConfig):
     nuc = NUCInterface(**cfg.nuc)
     gello = GELLOInterface(**cfg.gello)

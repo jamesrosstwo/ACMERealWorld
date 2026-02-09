@@ -14,18 +14,7 @@ import numpy as np
 from pathlib import Path
 from typing import List
 
-
-def enumerate_devices():
-    ctx = rs.context()
-    devs = []
-    for d in ctx.query_devices():
-        serial = d.get_info(rs.camera_info.serial_number)
-        product = d.get_info(rs.camera_info.product_line)
-        devs.append((serial, product))
-    return devs
-
-def get_tmstmp(frame):
-    return frame.get_frame_metadata(rs.frame_metadata_value.backend_timestamp)
+from client.utils import enumerate_devices
 
 
 class RSBagProcessor:
@@ -100,7 +89,7 @@ class RealSenseInterface:
     def serials(self) -> List[str]:
         return list(self._serials)
 
-    def __init__(self, path: Path = None, *, n_frames: int, width: int, height: int, fps: int, init=True):
+    def __init__(self, path: Path, *, n_frames: int, width: int, height: int, fps: int):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self._path = path
         self._n_frames = n_frames
@@ -108,15 +97,13 @@ class RealSenseInterface:
         self._height = height
         self._fps = fps
         self._all_intr = []
-        self._recording_bagpaths = []
         self._counts_lock = threading.Lock()
         self._serials: List[str] = []
         self._serial_to_idx = {}
-        if init:
-            self._pipelines = self._initialize_cameras()
-            self._stop_events = []
-            self._threads = []
-            self.frame_counts = {s: 0 for s in self._serials}
+        self._pipelines = self._initialize_cameras()
+        self._stop_events = []
+        self._threads = []
+        self.frame_counts = {s: 0 for s in self._serials}
 
     def _initialize_cameras(self):
         cameras = enumerate_devices()
@@ -132,41 +119,20 @@ class RealSenseInterface:
         for idx, (serial, _) in enumerate(cameras):
             self._serials.append(serial)
             self._serial_to_idx[serial] = idx
-            pipe, cfg = self.create_pipeline(serial, self._width, self._height, self._fps)
+
+            cfg = rs.config()
+            cfg.enable_device(serial)
+            cfg.enable_stream(rs.stream.depth, self._width, self._height, rs.format.z16, self._fps)
+            cfg.enable_stream(rs.stream.color, self._width, self._height, rs.format.bgr8, self._fps)
+            bag_path = str(self._path / f"{serial}.bag")
+            cfg.enable_record_to_file(bag_path)
+
+            pipe = rs.pipeline()
             pipelines.append((pipe, cfg))
 
         print("Waiting for cameras to start..")
         time.sleep(8.0)
         return pipelines
-
-    def create_pipeline(self, serial: str, w: int, h: int, fps: int):
-        cfg = rs.config()
-        cfg.enable_device(serial)
-        cfg.enable_stream(rs.stream.depth, w, h, rs.format.z16, fps)
-        cfg.enable_stream(rs.stream.color, w, h, rs.format.bgr8, fps)
-
-        if self._path is not None:
-            tmp_path = str(self._path / f"{serial}.bag")
-            cfg.enable_record_to_file(tmp_path)
-            self._recording_bagpaths.append(tmp_path)
-
-        pipe = rs.pipeline()
-        return pipe, cfg
-
-    def _on_pipeline_started(self, serial, profile):
-        dep = profile.get_stream(rs.stream.depth)
-        i = dep.as_video_stream_profile().get_intrinsics()
-        intr_vals = i.fx, i.fy, i.ppx, i.ppy
-        print(f"Camera {serial} intrinsics: {intr_vals})")
-        self._all_intr.append(np.asarray(intr_vals))
-
-    def _on_all_pipelines_started(self):
-        if self._path is not None and self._all_intr:
-            intrinsics_path = self._path / "intrinsics.npy"
-            np.save(intrinsics_path, np.stack(self._all_intr))
-
-    def _create_frame_thread(self, serial, pipe, callback, stop_event):
-        return self._FrameGrabberThread(serial, pipe, callback, stop_event)
 
     def start_capture(self, on_receive_frame: Callable = None):
         def _callback_wrapper(serial):
@@ -183,17 +149,23 @@ class RealSenseInterface:
             stop_event = threading.Event()
             profile = pipe.start(cfg)
 
-            self._on_pipeline_started(serial, profile)
+            dep = profile.get_stream(rs.stream.depth)
+            intr = dep.as_video_stream_profile().get_intrinsics()
+            intr_vals = intr.fx, intr.fy, intr.ppx, intr.ppy
+            print(f"Camera {serial} intrinsics: {intr_vals})")
+            self._all_intr.append(np.asarray(intr_vals))
 
             col_sensor = profile.get_device().query_sensors()[1]
             col_sensor.set_option(rs.option.exposure, 250)
             col_sensor.set_option(rs.option.gain, 128)
-            t = self._create_frame_thread(serial, pipe, _callback_wrapper, stop_event)
+
+            t = self._FrameGrabberThread(serial, pipe, _callback_wrapper, stop_event)
             t.start()
             self._threads.append(t)
             self._stop_events.append(stop_event)
 
-        self._on_all_pipelines_started()
+        if self._all_intr:
+            np.save(self._path / "intrinsics.npy", np.stack(self._all_intr))
 
     def get_frame_counts(self):
         with self._counts_lock:

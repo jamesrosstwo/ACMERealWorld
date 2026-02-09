@@ -5,5 +5,6 @@ episodes/
 *.log
 log/
 build/
+install/
 policies
 tasks.json
