@@ -12,9 +12,9 @@ from client.realsense import RealSenseInterface, enumerate_devices
 
 class EvalRSI(RealSenseInterface):
     class _FrameGrabberThread(threading.Thread):
-        def __init__(self, idx, pipe, callback, stop_event, cache_size=2):
+        def __init__(self, serial, pipe, callback, stop_event, cache_size=2):
             super().__init__()
-            self.idx = idx
+            self.serial = serial
             self.pipe = pipe
             self.callback = callback
             self.stop_event = stop_event
@@ -27,11 +27,11 @@ class EvalRSI(RealSenseInterface):
                     color_frame = fs.get_color_frame()
                     color = torch.tensor(np.asanyarray(color_frame.get_data()))
                     self._cache.append(color)
-                    self.callback(self.idx)
+                    self.callback(self.serial)
                 except Exception as e:
-                    print(f"Camera {self.idx} failed to grab frame: {e}")
+                    print(f"Camera {self.serial} failed to grab frame: {e}")
                     traceback.print_exc()
-            print(f"Stopping capture pipeline {self.idx}")
+            print(f"Stopping capture pipeline {self.serial}")
             self.pipe.stop()
 
         def get_obs(self):
@@ -52,7 +52,9 @@ class EvalRSI(RealSenseInterface):
             print(f"   Camera {idx}: {serial}  ({product})")
 
         pipelines = []
-        for serial in self._obs_cam_serial:
+        for idx, serial in enumerate(self._obs_cam_serial):
+            self._serials.append(serial)
+            self._serial_to_idx[serial] = idx
             pipe, cfg = self.create_pipeline(serial, self._width, self._height, self._fps)
             pipelines.append((pipe, cfg))
         return pipelines
@@ -64,14 +66,14 @@ class EvalRSI(RealSenseInterface):
         pipe = rs.pipeline()
         return pipe, cfg
 
-    def _on_pipeline_started(self, idx, profile):
+    def _on_pipeline_started(self, serial, profile):
         pass  # No depth intrinsics in eval mode
 
     def _on_all_pipelines_started(self):
         pass  # No intrinsics file to save
 
-    def _create_frame_thread(self, idx, pipe, callback, stop_event):
-        return self._FrameGrabberThread(idx, pipe, callback, stop_event)
+    def _create_frame_thread(self, serial, pipe, callback, stop_event):
+        return self._FrameGrabberThread(serial, pipe, callback, stop_event)
 
     def get_rgb_obs(self) -> List[torch.Tensor]:
         return [t.get_obs() for t in self._threads]

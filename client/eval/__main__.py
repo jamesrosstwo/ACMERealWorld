@@ -100,8 +100,9 @@ def record_episode(cfg, ep_path, nuc, policy):
         writer = EvalWriter(path=ep_path, **cfg.writer)
         nuc.reset()
 
-        def on_receive_frame(cap_idx):
-            if cap_idx == 0:
+        primary_serial = rsi.serials[0]
+        def on_receive_frame(serial):
+            if serial == primary_serial:
                 c_state = nuc.get_robot_state()
                 c_state.update(dict(
                     action=nuc.get_desired_ee_pose()

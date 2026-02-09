@@ -24,7 +24,6 @@ realsense:
 writer:
   max_episode_len: ${max_episode_timesteps}
   instruction: "Push the green T shape into the black outline of the T shape on the table"
-  calibration_path: "/home/rvl_root/.config/JetBrains/PyCharm2025.2/scratches/calib.yaml"
   captures:
     frame_width: ${realsense.width}
     frame_height: ${realsense.height}

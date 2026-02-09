@@ -1,73 +1,11 @@
-import shutil
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict, List
 
 import cv2
 import numpy as np
 import yaml
 import zarr
-from omegaconf import DictConfig, OmegaConf
-from tqdm import tqdm
-
-from client.utils import get_latest_ep_path
-
-
-class KalibrWriter:
-    class _CaptureWriter:
-        def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int):
-            self._path = path
-            self._path.mkdir()
-            self._max_episode_len = max_episode_len
-            self._frame_width = frame_width
-            self._frame_height = frame_height
-            self._highest_seen_index = 0
-            self._grayscale_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint8)
-            self._timestamps = np.zeros((max_episode_len,), dtype=np.uint64)
-
-        def write_frame(self, timestamp, color):
-            if self._highest_seen_index >= self._max_episode_len:
-                raise IndexError
-            self._grayscale_cache[self._highest_seen_index] = cv2.cvtColor(color, cv2.COLOR_RGB2GRAY)
-            self._timestamps[self._highest_seen_index] = timestamp
-            self._highest_seen_index = self._highest_seen_index + 1
-
-        def flush(self):
-            for index in range(self._highest_seen_index):
-                rgb_frame: np.ndarray = self._grayscale_cache[index]
-                timestamp_us = int(self._timestamps[index]) * 1000000
-                out_path = self._path / f"{timestamp_us}.png"
-                cv2.imwrite(str(out_path), rgb_frame)
-
-    def __init__(self, episodes_path: str, target: DictConfig, max_episode_len: int, n_cameras: int,
-                 captures: DictConfig):
-        self._base_episodes_path = Path(episodes_path)
-        self._base_episodes_path.mkdir(exist_ok=True, parents=True)
-        self.path = get_latest_ep_path(self._base_episodes_path, prefix="calibration")
-
-        with open(self.path / "target.yaml", "w") as f:
-            target_dict = OmegaConf.to_container(target, resolve=True)
-            yaml.dump(target_dict, f, default_flow_style=False)
-
-        self._n_cameras = n_cameras
-        self._max_episode_len = max_episode_len
-        self._captures: List = self._init_captures(captures)
-
-    def _init_captures(self, captures: DictConfig):
-        cap_writers = []
-        for i in range(self._n_cameras):
-            c_path = self.path / f"cam_{i}"
-            cw = self._CaptureWriter(c_path, **captures)
-            cap_writers.append(cw)
-        return cap_writers
-
-    def write_capture_frame(self, cap_idx, timestamp, rgb):
-        self._captures[cap_idx].write_frame(timestamp, rgb)
-
-    def flush(self):
-        # Only captures require flushing at the end of the collection
-        print("FLUSHING CAPTURES")
-        for cap in self._captures:
-            cap.flush()
+from omegaconf import DictConfig
 
 
 class ACMEWriter:
@@ -98,40 +36,34 @@ class ACMEWriter:
             self.depth_tmstmps[self.highest_written_index] = depth_tmstmp
             self.highest_written_index += 1
 
-    def __init__(self, path: Path, max_episode_len: int, n_cameras: int, instruction: str, calibration_path: str,
+    def __init__(self, path: Path, max_episode_len: int, serials: List[str], instruction: str,
                  captures: DictConfig):
         self.path = path
         assert self.path.exists()
         self.instruction = instruction
-        self.calibration_path = calibration_path
         self._store = zarr.DirectoryStore(str(self.path / "episode.zarr"))
         self._root = zarr.group(store=self._store)
-        self._n_cameras = n_cameras
         self._max_episode_len = max_episode_len
-        self._captures: List = self._init_captures(captures)
+        self._captures: Dict[str, ACMEWriter._CaptureWriter] = self._init_captures(serials, captures)
         self._state_write_counter = 0
 
     @property
     def episode_path(self):
         return self.path
 
-    def _init_captures(self, captures: DictConfig):
+    def _init_captures(self, serials: List[str], captures: DictConfig):
         capture_path_base = self.path / "captures"
         capture_path_base.mkdir()
 
-        cap_writers = []
-        for i in range(self._n_cameras):
-            c_path = capture_path_base / f"capture_{i}"
+        cap_writers = {}
+        for serial in serials:
+            c_path = capture_path_base / f"capture_{serial}"
             cw = self._CaptureWriter(c_path, **captures)
-            cap_writers.append(cw)
+            cap_writers[serial] = cw
         return cap_writers
 
-    def write_frame(self, colors, depths):
-        for cap, col, dep in zip(self._captures, colors, depths):
-            cap.write_frame(col, dep)
-
-    def write_capture_frame(self, capture_index, col_tmstmp, depth_tmstmp, color, depth):
-        self._captures[capture_index].write_frame(color, col_tmstmp, depth, depth_tmstmp)
+    def write_capture_frame(self, serial: str, col_tmstmp, depth_tmstmp, color, depth):
+        self._captures[serial].write_frame(color, col_tmstmp, depth, depth_tmstmp)
 
     def write_state(self, **state):
         for k, v in state.items():
@@ -154,13 +86,14 @@ class ACMEWriter:
 
     def flush(self):
         # We write state on the fly, only captures require flushing at the end of the collection
-        empty_captures = [i for i, c in enumerate(self._captures) if c.highest_written_index == 0]
+        captures = list(self._captures.values())
+        empty_captures = [s for s, c in self._captures.items() if c.highest_written_index == 0]
         if empty_captures:
             print(f"Warning: captures {empty_captures} have no frames, skipping flush")
             return
 
-        all_rgb_ts = [c.col_tmstmps[:c.highest_written_index] for c in self._captures]
-        all_depth_ts = [c.depth_tmstmps[:c.highest_written_index] for c in self._captures]
+        all_rgb_ts = [c.col_tmstmps[:c.highest_written_index] for c in captures]
+        all_depth_ts = [c.depth_tmstmps[:c.highest_written_index] for c in captures]
 
         t0 = max(
             max(ts[0] for ts in all_rgb_ts),
@@ -176,7 +109,7 @@ class ACMEWriter:
         sync_len = len(ref_ts)
 
         global_synced = []
-        for cap in self._captures:
+        for cap in captures:
             depth_frames = cap._depth_cache[:cap.highest_written_index]
             rgb_frames = cap._rgb_cache[:cap.highest_written_index]
             depth_ts = cap.depth_tmstmps[:cap.highest_written_index]

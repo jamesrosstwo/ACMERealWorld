@@ -2,5 +2,8 @@ outputs/
 .idea/
 episodes/
 **.pyc
+*.log
+log/
+build/
 policies
 tasks.json

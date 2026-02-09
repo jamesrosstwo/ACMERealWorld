@@ -10,7 +10,7 @@ from omegaconf import DictConfig
 
 from client.nuc import NUCInterface
 from client.realsense import RealSenseInterface
-from client.teleop import GELLOInterface
+from client.gello import GELLOInterface
 from client.utils import get_latest_ep_path
 from client.write import ACMEWriter
 
@@ -46,15 +46,16 @@ def main(cfg: DictConfig):
             ep_path = get_latest_ep_path(base_ep_path, prefix="episode")
             print(f"Recording to {ep_path}")
             with RealSenseInterface(ep_path, **cfg.realsense) as rs_interface:
-                episode_writer = ACMEWriter(ep_path, n_cameras=rs_interface.n_cameras, **cfg.writer)
+                episode_writer = ACMEWriter(ep_path, serials=rs_interface.serials, **cfg.writer)
                 nuc.reset()
                 start_control(gello, nuc)
-                def on_receive_frame(capture_idx):
-                    if capture_idx == 0:
+                primary_serial = rs_interface.serials[0]
+                def on_receive_frame(serial):
+                    if serial == primary_serial:
                         state = nuc.get_robot_state()
-                        # for episode collection we just assume all cameras are synchronized to cam0,
-                        # and that this synchronous operation of getting robot state from the NUC takes
-                        # no time.
+                        # for episode collection we just assume all cameras are synchronized to the
+                        # primary camera, and that this synchronous operation of getting robot state
+                        # from the NUC takes no time.
                         current_action = action_step(gello, nuc)
                         episode_writer.write_state(action=current_action, **state)
 
