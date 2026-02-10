@@ -1,0 +1,34 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Collect",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "client.collect",
+      "args": ["task=${fileBasenameNoExtension}"],
+      "python": "/home/james/anaconda3/envs/ACMEReal/bin/python",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    },
+    {
+      "name": "Eval",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "client.eval",
+      "args": ["task=${fileBasenameNoExtension}"],
+      "python": "/home/james/anaconda3/envs/ACMEReal/bin/python",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    },
+    {
+      "name": "Postprocess",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "client.postprocess",
+      "python": "/home/james/anaconda3/envs/ACMEReal/bin/python",
+      "cwd": "${workspaceFolder}",
+      "justMyCode": true
+    }
+  ]
+}

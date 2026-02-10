@@ -1,3 +1,4 @@
+# @package _group_
 instruction: "Pick up the object and place it at the target location"
 
 home_pos: [0.30582778, 0., 0.48467681]

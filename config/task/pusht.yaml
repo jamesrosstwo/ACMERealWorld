@@ -1,3 +1,4 @@
+# @package _group_
 instruction: "Push the green T shape into the black outline of the T shape on the table"
 
 home_pos: [0.30582778, 0., 0.48467681]
