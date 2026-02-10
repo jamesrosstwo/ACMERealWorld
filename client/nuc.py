@@ -140,15 +140,14 @@ class NUCInterface:
 
     def reset(self):
         self._panda.move_to_start()
+        home_pos, home_rot = self.home
+        self._panda.move_to_pose([home_pos], [home_rot])
 
     def start(self):
         try:
             from panda_py import controllers
             self._controller = controllers.CartesianImpedance()
             self._panda.start_controller(self._controller)
-            home_pos, home_rot = self.home
-            self._controller.set_control(home_pos, home_rot)
-            time.sleep(2)
         except ImportError:
             print("ERROR: panda_py.controllers not found. Control will not work.")
 
