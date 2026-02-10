@@ -67,7 +67,7 @@ class GELLOInterface:
             gripper_range = [self._gripper.open, self._gripper.closed]
         else:
             gripper_range = [self._gripper.closed, self._gripper.open]
-        return float(np.clip(np.interp(jointval, gripper_range, [0., 1.]), 0., 1.))
+        return float(np.clip(np.interp(jointval, gripper_range, [1., 0.]), 0., 1.))
 
 
     def _get_joints(self):
