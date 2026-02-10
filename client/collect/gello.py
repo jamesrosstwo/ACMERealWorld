@@ -60,11 +60,14 @@ class GELLOInterface:
         self._gripper = gripper
 
     def get_gripper(self):
-        gripper_range = [self._gripper.open, self._gripper.closed]
         jointval = self._driver.get_joints()[-1]
-        gripper_joint = np.interp(jointval, gripper_range, [0, 1.])
-        g = gripper_joint * self._gripper.sign
-        return g
+        # Map from dynamixel range to [0=open, 1=closed].
+        # sign determines direction: +1 means open < closed, -1 means open > closed.
+        if self._gripper.sign > 0:
+            gripper_range = [self._gripper.open, self._gripper.closed]
+        else:
+            gripper_range = [self._gripper.closed, self._gripper.open]
+        return float(np.clip(np.interp(jointval, gripper_range, [0., 1.]), 0., 1.))
 
 
     def _get_joints(self):
