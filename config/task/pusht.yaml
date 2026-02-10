@@ -1,7 +1,7 @@
 # @package _group_
 instruction: "Push the green T shape into the black outline of the T shape on the table"
 
-home_pos: [0.425, 0., 0.38]
+home_pos: [0.425, -0.375, 0.38]
 home_rot: [0.707, 0.707, 0., 0.]
 
 # Per-axis position mask: true = free (policy controls), false = frozen to home.
