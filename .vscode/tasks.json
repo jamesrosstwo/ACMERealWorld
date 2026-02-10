@@ -4,21 +4,21 @@
     {
       "label": "Collect",
       "type": "shell",
-      "command": "conda run -n ACMEReal python -m client.collect task=${fileBasenameNoExtension}",
+      "command": "${command:python.interpreterPath} -u -m client.collect task=${fileBasenameNoExtension}",
       "group": "build",
       "problemMatcher": []
     },
     {
       "label": "Eval",
       "type": "shell",
-      "command": "conda run -n ACMEReal python -m client.eval task=${fileBasenameNoExtension}",
+      "command": "${command:python.interpreterPath} -u -m client.eval task=${fileBasenameNoExtension}",
       "group": "test",
       "problemMatcher": []
     },
     {
       "label": "Postprocess",
       "type": "shell",
-      "command": "conda run -n ACMEReal python -m client.postprocess",
+      "command": "${command:python.interpreterPath} -u -m client.postprocess",
       "group": "build",
       "problemMatcher": []
     }
