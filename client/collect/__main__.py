@@ -37,7 +37,13 @@ def action_step(gello: GELLOInterface, nuc: NUCInterface, task_cfg: DictConfig):
     joint_angles = gello.get_joint_angles()
     eef_pos, eef_rot = nuc.forward_kinematics(torch.tensor(joint_angles))
 
-    gripper_force = np.zeros(1)
+    home_pos, home_rot = nuc.home
+    pos_mask = np.array(task_cfg.pos_mask)
+    eef_pos = np.where(pos_mask, eef_pos, home_pos)
+    if task_cfg.freeze_rotation:
+        eef_rot = home_rot
+
+    gripper_force = np.array([gello.get_gripper()])
     gripper_cmd = None if task_cfg.freeze_gripper else gripper_force
 
     nuc.send_control(eef_pos, eef_rot, gripper_cmd)
