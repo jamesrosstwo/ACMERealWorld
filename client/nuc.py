@@ -147,9 +147,11 @@ class NUCInterface:
         try:
             from panda_py import controllers
             impedance = np.eye(6)
-            impedance[:3, :3] *= 600   # translational stiffness (N/m)
-            impedance[3:, 3:] *= 300   # rotational stiffness (Nm/rad)
-            self._controller = controllers.CartesianImpedance(impedance=impedance)
+            impedance[:3, :3] *= 400   # translational stiffness (N/m)
+            impedance[3:, 3:] *= 60    # rotational stiffness (Nm/rad)
+            self._controller = controllers.CartesianImpedance(
+                impedance=impedance, nullspace_stiffness=15.0
+            )
             self._panda.start_controller(self._controller)
         except ImportError:
             print("ERROR: panda_py.controllers not found. Control will not work.")
