@@ -26,12 +26,6 @@ from client.utils import get_latest_ep_path
 from client.collect.write import ACMEWriter
 
 
-def start_control(gello: GELLOInterface, nuc: NUCInterface):
-    state = nuc.get_robot_state()
-    gello.zero_controls(state["qpos"])
-    nuc.start()
-
-
 
 def action_step(gello: GELLOInterface, nuc: NUCInterface, task_cfg: DictConfig):
     joint_angles = gello.get_joint_angles()
@@ -63,8 +57,12 @@ def main(cfg: DictConfig):
             print(f"Recording to {ep_path}")
             with RealSenseInterface(ep_path, **cfg.realsense) as rs_interface:
                 episode_writer = ACMEWriter(ep_path, serials=rs_interface.serials, **cfg.writer)
+
                 nuc.reset()
-                start_control(gello, nuc)
+                state = nuc.get_robot_state()
+                gello.zero_controls(state["qpos"])
+                nuc.start()
+                
                 primary_serial = rs_interface.serials[0]
                 def on_receive_frame(serial):
                     if serial == primary_serial:
