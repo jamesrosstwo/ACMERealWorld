@@ -1,0 +1,23 @@
+max_episode_timesteps: 500
+episodes_path: "/home/james/ACME/data/franka_aruco_eval"
+
+realsense:
+  n_frames: ${max_episode_timesteps}
+  width: 1280
+  height: 720
+  fps: 15
+
+writer:
+  max_episode_len: ${max_episode_timesteps}
+  instruction: "Push the green T shape into the black outline of the T shape on the table"
+  captures:
+    frame_width: ${realsense.width}
+    frame_height: ${realsense.height}
+    max_episode_len: ${writer.max_episode_len}
+    fps: ${realsense.fps}
+
+hydra:
+  output_subdir: null
+  job_logging: null
+  run:
+    dir: .

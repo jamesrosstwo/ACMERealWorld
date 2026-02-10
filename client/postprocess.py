@@ -12,11 +12,11 @@ import shutil
 from pathlib import Path
 
 import hydra
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from client.realsense import RSBagProcessor
-from client.write import ACMEWriter
+from client.collect.realsense import RSBagProcessor
+from client.collect.write import ACMEWriter
 
 
 def gather_data(episodes_path: str, n_frames: int, writer_cfg: DictConfig, realsense: DictConfig) -> Path:
@@ -51,8 +51,10 @@ def gather_data(episodes_path: str, n_frames: int, writer_cfg: DictConfig, reals
             print(f"bags unindexed for episode {ep_path}")
 
 
-@hydra.main(config_path="../config", config_name="collect")
+@hydra.main(config_path="../config", config_name="postprocess")
 def main(cfg: DictConfig):
+    cfg = OmegaConf.to_container(cfg, resolve=True)
+    cfg = OmegaConf.create(cfg)
     n_frames = cfg.max_episode_timesteps
     gather_data(cfg.episodes_path, n_frames, cfg.writer, cfg.realsense)
 

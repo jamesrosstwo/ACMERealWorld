@@ -54,5 +54,6 @@ gello:
 
 hydra:
   output_subdir: null
+  job_logging: null
   run:
-    dir: .1
+    dir: .
