@@ -18,12 +18,14 @@ from client.utils import enumerate_devices
 
 
 class RSBagProcessor:
-    def __init__(self, bag_paths: List[Path], n_frames: int, width: int, height: int, fps: int):
+    def __init__(self, bag_paths: List[Path], n_frames: int, width: int, height: int, fps: int,
+                 warmup_frames: int = 30):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self.bag_paths = bag_paths
         self.width = width
         self.height = height
         self.fps = fps
+        self._warmup_frames = warmup_frames
 
     def process_all_frames(self):
         for bag_path in self.bag_paths:
@@ -36,6 +38,10 @@ class RSBagProcessor:
         config.enable_device_from_file(str(bag_path), repeat_playback=False)
         pipeline.start(config)
         align = rs.align(rs.stream.color)
+
+        # Skip warmup frames recorded before exposure settings took effect.
+        for _ in range(self._warmup_frames):
+            pipeline.wait_for_frames()
 
         try:
             while True:
