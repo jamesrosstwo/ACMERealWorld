@@ -144,9 +144,10 @@ class RealSenseInterface:
                     print("stopping capture", serial)
                     self._stop_capture_by_serial(serial)
 
+        # Phase 1: Start all pipelines and configure exposure.
+        started = []
         for idx, (pipe, cfg) in enumerate(self._pipelines):
             serial = self._serials[idx]
-            stop_event = threading.Event()
             profile = pipe.start(cfg)
 
             dep = profile.get_stream(rs.stream.depth)
@@ -160,21 +161,29 @@ class RealSenseInterface:
             col_sensor.set_option(rs.option.exposure, 250)
             col_sensor.set_option(rs.option.gain, 128)
 
-            if idx == 0 and on_warmup is not None:
-                on_warmup()
+            started.append(pipe)
 
-            # Drain warmup frames so the manual exposure settings take effect
-            # before any frames are counted or passed to the callback.
+        if self._all_intr:
+            np.save(self._path / "intrinsics.npy", np.stack(self._all_intr))
+
+        # Phase 2: Run on_warmup callback (e.g. gripper homing) concurrently
+        # with the warmup drain.
+        if on_warmup is not None:
+            on_warmup()
+
+        # Phase 3: Drain warmup frames so manual exposure takes effect.
+        for pipe in started:
             for _ in range(30):
                 pipe.wait_for_frames(timeout_ms=5000)
 
+        # Phase 4: Start capture threads (no frames counted until now).
+        for idx, pipe in enumerate(started):
+            serial = self._serials[idx]
+            stop_event = threading.Event()
             t = self._FrameGrabberThread(serial, pipe, _callback_wrapper, stop_event)
             t.start()
             self._threads.append(t)
             self._stop_events.append(stop_event)
-
-        if self._all_intr:
-            np.save(self._path / "intrinsics.npy", np.stack(self._all_intr))
 
     def get_frame_counts(self):
         with self._counts_lock:
