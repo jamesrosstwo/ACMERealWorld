@@ -130,7 +130,7 @@ def record_episode(cfg, ep_path, nuc, policy):
                 ))
                 writer.on_state_update(c_state)
 
-        rsi.start_capture(on_receive_frame)
+        rsi.start_capture(on_receive_frame, on_warmup=nuc.home_gripper)
         print("Waiting for realsense caches to fill")
         time.sleep(5.0)
 

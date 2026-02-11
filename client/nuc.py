@@ -37,7 +37,7 @@ class GripperInterface:
 
     def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
         try:
-            return self._gripper.grasp(width=grasp_width, speed=speed, force=force)
+            return self._gripper.grasp(width=grasp_width, speed=speed, force=force, epsilon_outer=0.1)
         except RuntimeError:
             return False
 
@@ -137,6 +137,10 @@ class NUCInterface:
     def send_control_tensor(self, eef_pos: torch.Tensor, eef_rot: torch.Tensor, gripper: torch.Tensor):
         g = gripper.cpu().numpy() if gripper is not None else None
         self.send_control(eef_pos.cpu().numpy(), eef_rot.cpu().numpy(), g)
+
+    def home_gripper(self):
+        """Calibrate the gripper via homing in a background thread."""
+        threading.Thread(target=self._gripper._gripper.homing, daemon=True).start()
 
     def reset(self):
         self._panda.move_to_start()

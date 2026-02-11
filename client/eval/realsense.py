@@ -87,7 +87,7 @@ class EvalRealsense:
 
         return pipelines
 
-    def start_capture(self, on_receive_frame: Callable = None):
+    def start_capture(self, on_receive_frame: Callable = None, on_warmup: Callable = None):
         def _callback_wrapper(serial):
             if on_receive_frame is not None:
                 on_receive_frame(serial)
@@ -102,8 +102,17 @@ class EvalRealsense:
             stop_event = threading.Event()
             profile = pipe.start(cfg)
             col_sensor = profile.get_device().query_sensors()[1]
+            col_sensor.set_option(rs.option.enable_auto_exposure, 0)
             col_sensor.set_option(rs.option.exposure, 250)
             col_sensor.set_option(rs.option.gain, 128)
+
+            if idx == 0 and on_warmup is not None:
+                on_warmup()
+
+            # Drain warmup frames so the manual exposure settings take effect
+            # before any frames are counted or passed to the callback.
+            for _ in range(30):
+                pipe.wait_for_frames(timeout_ms=5000)
 
             t = self._FrameGrabberThread(serial, pipe, _callback_wrapper, stop_event)
             t.start()

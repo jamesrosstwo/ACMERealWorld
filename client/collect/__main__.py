@@ -73,7 +73,7 @@ def main(cfg: DictConfig):
                         current_action = action_step(gello, nuc, cfg.task)
                         episode_writer.write_state(timestamp=timestamp, action=current_action, **state)
 
-                rs_interface.start_capture(on_receive_frame)
+                rs_interface.start_capture(on_receive_frame, on_warmup=nuc.home_gripper)
                 rs_interface.reset_frame_counts()
                 while any([c < cfg.max_episode_timesteps for c in rs_interface.get_frame_counts().values()]):
                     time.sleep(2.0)
