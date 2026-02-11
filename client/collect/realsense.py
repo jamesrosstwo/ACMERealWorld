@@ -18,14 +18,12 @@ from client.utils import enumerate_devices
 
 
 class RSBagProcessor:
-    def __init__(self, bag_paths: List[Path], n_frames: int, width: int, height: int, fps: int,
-                 warmup_frames: int = 30):
+    def __init__(self, bag_paths: List[Path], n_frames: int, width: int, height: int, fps: int):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self.bag_paths = bag_paths
         self.width = width
         self.height = height
         self.fps = fps
-        self._warmup_frames = warmup_frames
 
     def process_all_frames(self):
         for bag_path in self.bag_paths:
@@ -38,10 +36,6 @@ class RSBagProcessor:
         config.enable_device_from_file(str(bag_path), repeat_playback=False)
         pipeline.start(config)
         align = rs.align(rs.stream.color)
-
-        # Skip warmup frames recorded before exposure settings took effect.
-        for _ in range(self._warmup_frames):
-            pipeline.wait_for_frames()
 
         try:
             while True:
@@ -150,11 +144,17 @@ class RealSenseInterface:
                     print("stopping capture", serial)
                     self._stop_capture_by_serial(serial)
 
-        # Phase 1: Start all pipelines and configure exposure.
+        # Phase 1: Start all pipelines, pause recording, and configure exposure.
         started = []
+        recorders = []
         for idx, (pipe, cfg) in enumerate(self._pipelines):
             serial = self._serials[idx]
             profile = pipe.start(cfg)
+
+            # Pause bag recording immediately so warmup frames are not saved.
+            recorder = profile.get_device().as_recorder()
+            recorder.pause()
+            recorders.append(recorder)
 
             dep = profile.get_stream(rs.stream.depth)
             intr = dep.as_video_stream_profile().get_intrinsics()
@@ -182,7 +182,10 @@ class RealSenseInterface:
             for _ in range(30):
                 pipe.wait_for_frames(timeout_ms=5000)
 
-        # Phase 4: Start capture threads (no frames counted until now).
+        # Phase 4: Resume recording and start capture threads.
+        for recorder in recorders:
+            recorder.resume()
+
         for idx, pipe in enumerate(started):
             serial = self._serials[idx]
             stop_event = threading.Event()
