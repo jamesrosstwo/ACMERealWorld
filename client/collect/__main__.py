@@ -64,14 +64,14 @@ def main(cfg: DictConfig):
                 nuc.start()
                 
                 primary_serial = rs_interface.serials[0]
-                def on_receive_frame(serial):
+                def on_receive_frame(serial, timestamp):
                     if serial == primary_serial:
                         state = nuc.get_robot_state()
                         # for episode collection we just assume all cameras are synchronized to the
                         # primary camera, and that this synchronous operation of getting robot state
                         # from the NUC takes no time.
                         current_action = action_step(gello, nuc, cfg.task)
-                        episode_writer.write_state(action=current_action, **state)
+                        episode_writer.write_state(timestamp=timestamp, action=current_action, **state)
 
                 rs_interface.start_capture(on_receive_frame)
                 rs_interface.reset_frame_counts()

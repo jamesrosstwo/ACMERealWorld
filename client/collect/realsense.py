@@ -74,7 +74,7 @@ class RealSenseInterface:
             while not self.stop_event.is_set():
                 try:
                     fs = self.pipe.wait_for_frames(timeout_ms=5000)
-                    self.callback(self.serial)
+                    self.callback(self.serial, fs.get_timestamp())
                 except Exception as e:
                     print(f"Camera {self.serial} failed to grab frame: {e}")
                     traceback.print_exc()
@@ -135,9 +135,9 @@ class RealSenseInterface:
         return pipelines
 
     def start_capture(self, on_receive_frame: Callable = None):
-        def _callback_wrapper(serial):
+        def _callback_wrapper(serial, timestamp):
             if on_receive_frame is not None:
-                on_receive_frame(serial)
+                on_receive_frame(serial, timestamp)
             with self._counts_lock:
                 self.frame_counts[serial] += 1
                 if self.frame_counts[serial] >= self._n_frames:

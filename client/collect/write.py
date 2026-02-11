@@ -15,6 +15,85 @@ import zarr
 from omegaconf import DictConfig
 
 
+def compute_sync_window(all_rgb_ts, all_depth_ts):
+    """Compute the common temporal window across all cameras.
+
+    Returns (t0, t1) where t0 is the latest start and t1 is the earliest end
+    across all RGB and depth timestamp arrays.
+    """
+    t0 = max(
+        max(ts[0] for ts in all_rgb_ts),
+        max(ts[0] for ts in all_depth_ts)
+    )
+    t1 = min(
+        min(ts[-1] for ts in all_rgb_ts),
+        min(ts[-1] for ts in all_depth_ts)
+    )
+    return t0, t1
+
+
+def align_frames_to_reference(ref_ts, cam_rgb_ts, cam_rgb_frames, cam_depth_frames):
+    """Align a camera's frames to reference timestamps using nearest-neighbor matching.
+
+    Uses a greedy forward search: for each reference timestamp, finds the closest
+    camera frame timestamp (only advancing forward through the camera timestamps).
+
+    Returns (synced_rgb_frames, synced_depth_frames, synced_timestamps).
+    """
+    synced_rgb_frames = []
+    synced_depth_frames = []
+    synced_timestamps = []
+
+    t_idx = 0
+    for t in ref_ts:
+        while (t_idx + 1 < len(cam_rgb_ts) and
+               abs(cam_rgb_ts[t_idx + 1] - t) < abs(cam_rgb_ts[t_idx] - t)):
+            t_idx += 1
+
+        synced_rgb_frames.append(cam_rgb_frames[t_idx])
+        synced_depth_frames.append(cam_depth_frames[t_idx])
+        synced_timestamps.append(cam_rgb_ts[t_idx])
+
+    return synced_rgb_frames, synced_depth_frames, synced_timestamps
+
+
+def nearest_neighbor_indices(ref_ts, source_ts):
+    """For each reference timestamp, find the index of the nearest source timestamp.
+
+    Uses the same greedy forward search as align_frames_to_reference: the source
+    index only advances forward, so the mapping is monotonic.
+
+    Returns a list of integer indices into source_ts (one per ref_ts entry).
+    """
+    indices = []
+    s_idx = 0
+    for t in ref_ts:
+        while (s_idx + 1 < len(source_ts) and
+               abs(source_ts[s_idx + 1] - t) < abs(source_ts[s_idx] - t)):
+            s_idx += 1
+        indices.append(s_idx)
+    return indices
+
+
+def resample_timeseries(data, target_len):
+    """Resample a 1D or 2D time series to target_len using linear interpolation.
+
+    For 2D data, each column is interpolated independently.
+    """
+    orig_len = len(data)
+    if orig_len == target_len:
+        return data
+    orig_idx = np.linspace(0, 1, orig_len)
+    new_idx = np.linspace(0, 1, target_len)
+    if data.ndim == 1:
+        return np.interp(new_idx, orig_idx, data)
+    else:
+        interp = np.empty((target_len,) + data.shape[1:], dtype=data.dtype)
+        for j in range(data.shape[1]):
+            interp[:, j] = np.interp(new_idx, orig_idx, data[:, j])
+        return interp
+
+
 class ACMEWriter:
     class _CaptureWriter:
         def __init__(self, path: Path, max_episode_len: int, frame_width: int, frame_height: int, fps: int,
@@ -72,7 +151,15 @@ class ACMEWriter:
     def write_capture_frame(self, serial: str, col_tmstmp, depth_tmstmp, color, depth):
         self._captures[serial].write_frame(color, col_tmstmp, depth, depth_tmstmp)
 
-    def write_state(self, **state):
+    def write_state(self, timestamp=None, **state):
+        if timestamp is not None:
+            if '_state_timestamps' not in self._root:
+                self._root.create_dataset(
+                    name='_state_timestamps',
+                    shape=(self._max_episode_len,),
+                    chunks=(self._max_episode_len,),
+                )
+            self._root['_state_timestamps'][self._state_write_counter] = timestamp
         for k, v in state.items():
             if k not in self._root:
                 if isinstance(v, (float, int)):
@@ -102,42 +189,23 @@ class ACMEWriter:
         all_rgb_ts = [c.col_tmstmps[:c.highest_written_index] for c in captures]
         all_depth_ts = [c.depth_tmstmps[:c.highest_written_index] for c in captures]
 
-        t0 = max(
-            max(ts[0] for ts in all_rgb_ts),
-            max(ts[0] for ts in all_depth_ts)
-        )
-        t1 = min(
-            min(ts[-1] for ts in all_rgb_ts),
-            min(ts[-1] for ts in all_depth_ts)
-        )
+        t0, t1 = compute_sync_window(all_rgb_ts, all_depth_ts)
 
         ref_ts = all_rgb_ts[0]
-        ref_ts = ref_ts[(ref_ts >= t0) & (ref_ts <= t1)]
+        ref_mask = (ref_ts >= t0) & (ref_ts <= t1)
+        ref_ts = ref_ts[ref_mask]
         sync_len = len(ref_ts)
 
         global_synced = []
         for cap in captures:
             depth_frames = cap._depth_cache[:cap.highest_written_index]
             rgb_frames = cap._rgb_cache[:cap.highest_written_index]
-            depth_ts = cap.depth_tmstmps[:cap.highest_written_index]
             rgb_ts = cap.col_tmstmps[:cap.highest_written_index]
 
-            synced_rgb_frames = []
-            synced_depth_frames = []
-            synced_timestamps = []
-
-            t_idx = 0
-            for t in ref_ts:
-                while (t_idx + 1 < len(rgb_ts) and
-                       abs(rgb_ts[t_idx + 1] - t) < abs(rgb_ts[t_idx] - t)):
-                    t_idx += 1
-
-                synced_rgb_frames.append(rgb_frames[t_idx])
-                # Assume depth and rgb are captured simultaneously (usually <1ms off in practice)
-                synced_depth_frames.append(depth_frames[t_idx])
-                synced_timestamps.append(rgb_ts[t_idx])
-
-            global_synced.append((cap, synced_rgb_frames, synced_depth_frames, synced_timestamps))
+            synced_rgb, synced_depth, synced_ts = align_frames_to_reference(
+                ref_ts, rgb_ts, rgb_frames, depth_frames
+            )
+            global_synced.append((cap, synced_rgb, synced_depth, synced_ts))
 
         for cap, rgb_frames, depth_frames, synced_timestamps in global_synced:
             # depth
@@ -159,25 +227,30 @@ class ACMEWriter:
                 np.savez(f, np.asarray(synced_timestamps))
 
         state = zarr.open_group(str(self.path / "episode.zarr"), mode="r+")
-        orig_len = len(next(iter(state.values())))
-        # Aligns timesteps when some cameras are slightly slower
-        if orig_len != sync_len:
-            orig_idx = np.linspace(0, 1, orig_len)
-            new_idx = np.linspace(0, 1, sync_len)
+        # Align state entries to the synced reference timestamps.
+        if '_state_timestamps' in state:
+            # Use recorded state timestamps for proper nearest-neighbor alignment.
+            # The array is zero-initialized; valid timestamps are always > 0,
+            # so the first zero marks the end of valid entries.
+            state_ts_arr = np.array(state['_state_timestamps'])
+            nonzero = state_ts_arr != 0
+            n_state = len(state_ts_arr) if nonzero.all() else int(np.argmin(nonzero))
+            state_ts = state_ts_arr[:n_state]
+            sync_indices = nearest_neighbor_indices(ref_ts, state_ts)
+            del state['_state_timestamps']
             for key, arr in list(state.items()):
-                data = np.array(arr)
-
+                data = np.array(arr)[:n_state]
                 state.create_dataset(f"{key}_original", data=data)
                 del state[key]
-
-                if data.ndim == 1:
-                    interp = np.interp(new_idx, orig_idx, data)
-                else:
-                    interp = np.empty((sync_len,) + data.shape[1:], dtype=data.dtype)
-                    for j in range(data.shape[1]):
-                        interp[:, j] = np.interp(new_idx, orig_idx, data[:, j])
-
-                state.create_dataset(f"{key}", data=interp)
+                state.create_dataset(f"{key}", data=data[sync_indices])
+        else:
+            # Legacy fallback: no state timestamps, assume 1:1 with primary camera
+            n_state = captures[0].highest_written_index
+            for key, arr in list(state.items()):
+                data = np.array(arr)[:n_state]
+                state.create_dataset(f"{key}_original", data=data)
+                del state[key]
+                state.create_dataset(f"{key}", data=data[ref_mask])
 
         metadata = dict(
             n_timesteps=sync_len,
