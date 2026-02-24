@@ -25,9 +25,9 @@ realsense:
   fps: 15
   obs_cams:
     - "148122060186" # high right
-    - "932122060415" # high left
+    # - "932122060415" # high left
 #    - "848312071702" # overhead
-#    - "217222061106" # wrist cam
+    - "217222061106" # wrist cam
 #    - "051222062898"
 
 hydra:

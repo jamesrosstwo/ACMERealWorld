@@ -153,7 +153,7 @@ class EvalPolicyInterface:
             o = self._offset
             desired_eef_pos = action[0, o:self._action_horizon + o, :3]
             desired_eef_rot = action[0, o:self._action_horizon + o, 3:7]
-            desired_gripper_force = torch.zeros((desired_eef_pos.shape[0], 1))
+            desired_gripper_force = action[0, o:self._action_horizon + o, 7]
             return desired_eef_pos, desired_eef_rot, desired_gripper_force
         except Exception as err:
             logging.info(f"Error communicating with the server: {err}")

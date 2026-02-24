@@ -160,7 +160,7 @@ class EvalWriter:
         self._states_lock = threading.Lock()
         self.states = []
         self.inferences = []
-        self._state_keys = ["qpos", "qvel", "ee_pos", "ee_rot", "gripper_force", "action"]
+        self._state_keys = ["qpos", "ee_pos", "ee_rot", "gripper_force", "action"]
         self._inference_keys = ["ee_pos", "ee_quat", "gripper_force", "desired_ee_pos", "desired_ee_quat", "desired_gripper_force"]
 
     def get_states_snapshot(self):

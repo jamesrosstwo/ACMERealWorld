@@ -1,7 +1,7 @@
 defaults:
   - task: pusht
 
-max_episode_timesteps: 500
+max_episode_timesteps: 250
 episodes_path: "/mnt/ssd/james/episodes"
 
 nuc:

@@ -74,6 +74,8 @@ def start_control_loop(
             gripper_force=np.expand_dims(gripper_force, 0)
         )
 
+        print(desired_gripper_force)
+
         horizon_len = desired_eef_pos.shape[0]
         home_eef_pos, home_eef_rot = nuc.home
         desired_eef_pos = desired_eef_pos.to(torch.float64)
@@ -130,7 +132,7 @@ def record_episode(cfg, ep_path, nuc, policy):
                 ))
                 writer.on_state_update(c_state)
 
-        rsi.start_capture(on_receive_frame, on_warmup=nuc.home_gripper)
+        rsi.start_capture(on_receive_frame)#, on_warmup=nuc.home_gripper)
         print("Waiting for realsense caches to fill")
         time.sleep(5.0)
 

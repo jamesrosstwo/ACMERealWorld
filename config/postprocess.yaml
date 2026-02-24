@@ -1,5 +1,5 @@
-max_episode_timesteps: 500
-episodes_path: "/home/james/ACME/data/franka_aruco_eval"
+max_episode_timesteps: 600
+episodes_path: "/mnt/ssd/james/episodes"
 
 realsense:
   n_frames: ${max_episode_timesteps}

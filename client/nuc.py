@@ -32,10 +32,10 @@ class GripperInterface:
             is_grasped=state.is_grasped
         )
 
-    def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
+    def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = False):
         self._gripper.move(width=width, speed=speed)
 
-    def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = True):
+    def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = False):
         try:
             return self._gripper.grasp(width=grasp_width, speed=speed, force=force, epsilon_outer=0.1)
         except RuntimeError:
@@ -48,11 +48,11 @@ class GripperInterface:
         pass
 
     def _do_grasp(self):
-        self.grasp(speed=0.1, force=10.0, blocking=True)
+        self.grasp(speed=0.1, force=10.0, blocking=False)
 
     def _do_open(self):
         mx = self.get_state().max_width
-        self.goto(width=mx, speed=0.1, blocking=True)
+        self.goto(width=mx, speed=0.1, blocking=False)
 
     def act_async(self, gripper_val: float):
         val = float(gripper_val)

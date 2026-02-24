@@ -114,7 +114,7 @@ class EvalRealsense:
 
         # Phase 3: Drain warmup frames so manual exposure takes effect.
         for pipe in started:
-            for _ in range(30):
+            for _ in range(20):
                 pipe.wait_for_frames(timeout_ms=5000)
 
         # Phase 4: Start capture threads (no frames counted until now).

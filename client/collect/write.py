@@ -255,7 +255,7 @@ class ACMEWriter:
         metadata = dict(
             n_timesteps=sync_len,
             instruction=self.instruction,
-            dynamic_captures=[5]
+            dynamic_captures=[217222061106]
         )
         with open(self.episode_path / "metadata.yaml", "w") as f:
             yaml.dump(metadata, f)
