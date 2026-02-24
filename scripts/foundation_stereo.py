@@ -1,7 +1,7 @@
 """Compute depth from IR stereo pairs using FoundationStereo.
 
 Reads ``ir_left.zarr`` and ``ir_right.zarr`` from each capture directory,
-runs FoundationStereo inference, and writes ``depth.zarr`` (float32, metres).
+runs FoundationStereo inference, and writes ``depth.zarr`` (uint16, millimetres).
 
 Can be used standalone::
 
@@ -76,8 +76,8 @@ def stereo_to_depth(model, args, ir_left: np.ndarray, ir_right: np.ndarray,
     Returns
     -------
     depth : np.ndarray
-        Float32 depth map in metres, shape ``(H, W)``.  Pixels with invalid
-        disparity are set to 0.
+        Uint16 depth map in millimetres, shape ``(H, W)``.  Pixels with
+        invalid disparity or depth > 65535 mm are set to 0.
     """
     # FoundationStereo expects 3-channel float tensors (N, 3, H, W).
     img0 = np.stack([ir_left] * 3, axis=-1).astype(np.float32)
@@ -109,9 +109,13 @@ def stereo_to_depth(model, args, ir_left: np.ndarray, ir_right: np.ndarray,
     # depth = f * b / disparity  (disparity in pixels at the *scaled* resolution)
     effective_focal = focal_length * scale
     valid = disp > 0
-    depth = np.zeros_like(disp, dtype=np.float32)
-    depth[valid] = effective_focal * baseline / disp[valid]
-    return depth
+    depth_m = np.zeros_like(disp, dtype=np.float32)
+    depth_m[valid] = effective_focal * baseline / disp[valid]
+
+    # Convert to uint16 millimetres (0 stays 0 for invalid pixels).
+    depth_mm = depth_m * 1000.0
+    depth_mm[depth_mm > 65535] = 0
+    return depth_mm.astype(np.uint16)
 
 
 def process_episode(ep_path: Path, ckpt_dir: str, model=None, args=None,
@@ -119,7 +123,7 @@ def process_episode(ep_path: Path, ckpt_dir: str, model=None, args=None,
     """Run FoundationStereo on every capture in an episode directory.
 
     Reads ``ir_left.zarr`` / ``ir_right.zarr`` and the per-camera intrinsics
-    file, then writes ``depth.zarr`` (float32, metres) alongside the IR stores.
+    file, then writes ``depth.zarr`` (uint16, millimetres) alongside the IR stores.
 
     Parameters
     ----------
@@ -183,7 +187,7 @@ def process_episode(ep_path: Path, ckpt_dir: str, model=None, args=None,
         depth_out = zarr.open_array(depth_store, mode="w",
                                     shape=(n_frames, H, W),
                                     chunks=(16, H, W),
-                                    dtype=np.float32)
+                                    dtype=np.uint16)
 
         for i in tqdm(range(n_frames), desc=cap_dir.name):
             left = np.array(ir_left_arr[i])

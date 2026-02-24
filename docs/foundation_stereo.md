@@ -91,7 +91,7 @@ For each capture directory the script writes:
 
 ```
 capture_<serial>/
-  depth.zarr/     # (n_frames, H, W) float32 — depth in metres
+  depth.zarr/     # (n_frames, H, W) uint16 — depth in millimetres
 ```
 
 Depth is computed as `focal_length * baseline / disparity` using the IR

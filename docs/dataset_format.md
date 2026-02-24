@@ -157,10 +157,10 @@ Present only when FoundationStereo depth estimation is enabled (`stereo.enabled:
 | Property | Value |
 |----------|-------|
 | Shape | `(T, 720, 1280)` |
-| Dtype | `float32` |
+| Dtype | `uint16` |
 | Chunks | `(16, 720, 1280)` |
-| Units | Metres |
-| Invalid pixels | `0.0` (where stereo disparity was non-positive) |
+| Units | Millimetres |
+| Invalid pixels | `0` (where stereo disparity was non-positive or depth > 65535 mm) |
 
 Depth is computed from the IR stereo pair using the formula:
 
@@ -220,7 +220,7 @@ Postprocessing aligns all cameras and robot state to a common timeline:
 | End-effector position (`ee_pos`) | World frame (Franka base frame) | Metres |
 | End-effector orientation (`ee_rot`) | Quaternion, `xyzw` order (scipy convention) | Unitless |
 | Joint positions (`qpos`) | Franka Panda joint angles | Radians |
-| Depth values | Distance from camera | Metres |
+| Depth values | Distance from camera | Millimetres (uint16) |
 | Timestamps | RealSense SDK clock | Milliseconds |
 | IR baseline | Translation from IR1 to IR2 | Metres |
 | Intrinsics (`fx`, `fy`, `ppx`, `ppy`) | Pinhole camera model | Pixels |
