@@ -19,4 +19,6 @@ dependencies:
       - pyrealsense2
       - panda-python
       - torch
+      # FoundationStereo (stereo depth estimation) — install separately:
+      #   see docs/foundation_stereo.md
 

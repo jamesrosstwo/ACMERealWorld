@@ -113,9 +113,7 @@ class TestComputeSyncWindow:
     def test_two_cameras_overlapping(self):
         rgb = [np.array([1.0, 2.0, 3.0, 4.0]),
                np.array([2.0, 3.0, 4.0, 5.0])]
-        depth = [np.array([1.0, 2.0, 3.0, 4.0]),
-                 np.array([2.0, 3.0, 4.0, 5.0])]
-        t0, t1 = compute_sync_window(rgb, depth)
+        t0, t1 = compute_sync_window(rgb)
         assert t0 == 2.0
         assert t1 == 4.0
 
@@ -123,33 +121,20 @@ class TestComputeSyncWindow:
         rgb = [np.array([0.0, 1.0, 2.0, 3.0, 4.0]),
                np.array([1.5, 2.5, 3.5, 4.5]),
                np.array([0.5, 1.5, 2.5, 3.0])]
-        depth = [np.array([0.0, 1.0, 2.0, 3.0, 4.0]),
-                 np.array([1.5, 2.5, 3.5, 4.5]),
-                 np.array([0.5, 1.5, 2.5, 3.0])]
-        t0, t1 = compute_sync_window(rgb, depth)
+        t0, t1 = compute_sync_window(rgb)
         assert t0 == 1.5
         assert t1 == 3.0
 
     def test_identical_timestamp_ranges(self):
         ts = np.array([10.0, 20.0, 30.0])
         rgb = [ts.copy(), ts.copy()]
-        depth = [ts.copy(), ts.copy()]
-        t0, t1 = compute_sync_window(rgb, depth)
+        t0, t1 = compute_sync_window(rgb)
         assert t0 == 10.0
         assert t1 == 30.0
 
-    def test_depth_offset_from_rgb(self):
-        """Depth timestamps slightly later than RGB should shift t0 forward."""
-        rgb = [np.array([0.0, 1.0, 2.0, 3.0])]
-        depth = [np.array([0.5, 1.5, 2.5, 3.5])]
-        t0, t1 = compute_sync_window(rgb, depth)
-        assert t0 == 0.5  # depth starts later
-        assert t1 == 3.0  # rgb ends earlier
-
     def test_single_camera(self):
         rgb = [np.array([5.0, 10.0, 15.0])]
-        depth = [np.array([5.0, 10.0, 15.0])]
-        t0, t1 = compute_sync_window(rgb, depth)
+        t0, t1 = compute_sync_window(rgb)
         assert t0 == 5.0
         assert t1 == 15.0
 
@@ -160,21 +145,18 @@ class TestComputeSyncWindow:
 
 class TestAlignFramesToReference:
     def _make_frames(self, n, val=None):
-        """Create n dummy 2x2 RGB and depth frames."""
+        """Create n dummy 2x2 RGB frames."""
         rgb = np.arange(n).reshape(n, 1, 1, 1) * np.ones((1, 2, 2, 3), dtype=np.uint8) if val is None \
             else np.full((n, 2, 2, 3), val, dtype=np.uint8)
-        depth = np.arange(n).reshape(n, 1, 1) * np.ones((1, 2, 2), dtype=np.uint16) if val is None \
-            else np.full((n, 2, 2), val, dtype=np.uint16)
-        return rgb, depth
+        return rgb
 
     def test_exact_match(self):
         """When camera timestamps exactly match reference, output is identity."""
         ref_ts = np.array([1.0, 2.0, 3.0])
         cam_ts = np.array([1.0, 2.0, 3.0])
-        rgb, depth = self._make_frames(3)
-        s_rgb, s_depth, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb, depth)
+        rgb = self._make_frames(3)
+        s_rgb, s_ir_left, s_ir_right, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb)
         assert len(s_rgb) == 3
-        assert len(s_depth) == 3
         np.testing.assert_array_equal(s_ts, [1.0, 2.0, 3.0])
         # frame ordering preserved
         for i in range(3):
@@ -184,8 +166,8 @@ class TestAlignFramesToReference:
         """Camera has more frames than reference; extras are skipped."""
         ref_ts = np.array([0.0, 1.0, 2.0])
         cam_ts = np.array([0.0, 0.3, 0.7, 1.0, 1.4, 1.8, 2.0, 2.3])
-        rgb, depth = self._make_frames(8)
-        s_rgb, s_depth, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb, depth)
+        rgb = self._make_frames(8)
+        s_rgb, s_ir_left, s_ir_right, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb)
         assert len(s_rgb) == 3
         # ref 0.0 -> cam 0.0 (idx 0), ref 1.0 -> cam 1.0 (idx 3), ref 2.0 -> cam 2.0 (idx 6)
         np.testing.assert_array_equal(s_ts, [0.0, 1.0, 2.0])
@@ -194,8 +176,8 @@ class TestAlignFramesToReference:
         """Camera has fewer frames than reference; frames are reused."""
         ref_ts = np.array([0.0, 0.5, 1.0, 1.5, 2.0])
         cam_ts = np.array([0.0, 1.0, 2.0])
-        rgb, depth = self._make_frames(3)
-        s_rgb, s_depth, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb, depth)
+        rgb = self._make_frames(3)
+        s_rgb, s_ir_left, s_ir_right, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb)
         assert len(s_rgb) == 5
         # ref 0.0 -> cam 0.0, ref 0.5 -> cam 0.0 or 1.0 (equidistant, stays at 0),
         # ref 1.0 -> cam 1.0, ref 1.5 -> cam 1.0 or 2.0, ref 2.0 -> cam 2.0
@@ -208,8 +190,8 @@ class TestAlignFramesToReference:
         ref_ts = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
         # Camera drops frames around t=2-3
         cam_ts = np.array([0.0, 1.0, 3.8, 4.0])
-        rgb, depth = self._make_frames(4)
-        s_rgb, s_depth, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb, depth)
+        rgb = self._make_frames(4)
+        s_rgb, s_ir_left, s_ir_right, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb)
         assert len(s_rgb) == 5
         # ref 0 -> cam 0, ref 1 -> cam 1, ref 2 -> cam 1 (closer than 3.8),
         # ref 3 -> cam 3.8 (idx 2, advance from 1), ref 4 -> cam 4.0 (idx 3)
@@ -219,8 +201,8 @@ class TestAlignFramesToReference:
         """Single camera frame matched to all reference timestamps."""
         ref_ts = np.array([1.0, 2.0, 3.0])
         cam_ts = np.array([1.5])
-        rgb, depth = self._make_frames(1)
-        s_rgb, s_depth, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb, depth)
+        rgb = self._make_frames(1)
+        s_rgb, s_ir_left, s_ir_right, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb)
         assert len(s_rgb) == 3
         # All map to the only available frame
         np.testing.assert_array_equal(s_ts, [1.5, 1.5, 1.5])
@@ -229,24 +211,13 @@ class TestAlignFramesToReference:
         """The search only advances t_idx forward, never backwards."""
         ref_ts = np.array([1.0, 5.0, 5.5])
         cam_ts = np.array([1.0, 4.9, 5.1, 5.4])
-        rgb, depth = self._make_frames(4)
-        s_rgb, s_depth, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb, depth)
+        rgb = self._make_frames(4)
+        s_rgb, s_ir_left, s_ir_right, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb)
         # ref 1.0 -> cam 1.0 (idx 0)
         # ref 5.0 -> advance to idx 1 (4.9), check idx 2 (5.1): |5.1-5.0|=0.1 < |4.9-5.0|=0.1? No (not <). Stay at 1 -> ts 4.9
         # ref 5.5 -> from idx 1, check idx 2 (5.1): |5.1-5.5|=0.4 < |4.9-5.5|=0.6? Yes, advance.
         #            check idx 3 (5.4): |5.4-5.5|=0.1 < |5.1-5.5|=0.4? Yes, advance. idx=3 -> ts 5.4
         np.testing.assert_array_equal(s_ts, [1.0, 4.9, 5.4])
-
-    def test_depth_frames_follow_rgb_index(self):
-        """Depth frames use the same index as the matched RGB frame."""
-        ref_ts = np.array([0.0, 1.0])
-        cam_ts = np.array([0.0, 0.8, 1.2])
-        rgb = np.array([[[10]], [[20]], [[30]]], dtype=np.uint8).reshape(3, 1, 1, 1) * np.ones((1, 1, 1, 3), dtype=np.uint8)
-        depth = np.array([100, 200, 300], dtype=np.uint16).reshape(3, 1, 1)
-        s_rgb, s_depth, s_ts = align_frames_to_reference(ref_ts, cam_ts, rgb, depth)
-        # ref 0.0 -> idx 0, ref 1.0 -> idx 1 (0.8 is closer than 1.2)
-        assert s_depth[0][0, 0] == 100
-        assert s_depth[1][0, 0] == 200
 
 
 # ---------------------------------------------------------------------------

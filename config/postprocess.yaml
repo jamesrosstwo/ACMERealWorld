@@ -1,5 +1,5 @@
-max_episode_timesteps: 600
-episodes_path: "/mnt/ssd/james/episodes"
+max_episode_timesteps: 800
+episodes_path: "/home/james/ACME/data/mug_stereo"
 
 realsense:
   n_frames: ${max_episode_timesteps}
@@ -16,8 +16,15 @@ writer:
     max_episode_len: ${writer.max_episode_len}
     fps: ${realsense.fps}
 
+stereo:
+  enabled: false
+  ckpt_dir: "./third_party/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth"
+  scale: 1.0
+  valid_iters: 32
+
 hydra:
   output_subdir: null
   job_logging: null
+
   run:
     dir: .

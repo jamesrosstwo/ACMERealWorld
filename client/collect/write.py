@@ -1,7 +1,7 @@
 """Episode data writer.
 
 :class:`ACMEWriter` writes synchronized multi-camera RGB frames (MP4),
-depth maps (zarr), and robot state (zarr) for a single episode. During
+IR stereo pairs (zarr), and robot state (zarr) for a single episode. During
 collection frames are buffered in memory; :meth:`ACMEWriter.flush` performs
 cross-camera temporal synchronization, encodes video, and writes metadata.
 """
@@ -15,35 +15,28 @@ import zarr
 from omegaconf import DictConfig
 
 
-def compute_sync_window(all_rgb_ts, all_depth_ts):
+def compute_sync_window(all_rgb_ts):
     """Compute the common temporal window across all cameras.
 
     Returns (t0, t1) where t0 is the latest start and t1 is the earliest end
-    across all RGB and depth timestamp arrays.
+    across all RGB timestamp arrays.
     """
-    t0 = max(
-        max(ts[0] for ts in all_rgb_ts),
-        max(ts[0] for ts in all_depth_ts)
-    )
-    t1 = min(
-        min(ts[-1] for ts in all_rgb_ts),
-        min(ts[-1] for ts in all_depth_ts)
-    )
+    t0 = max(ts[0] for ts in all_rgb_ts)
+    t1 = min(ts[-1] for ts in all_rgb_ts)
     return t0, t1
 
 
-def align_frames_to_reference(ref_ts, cam_rgb_ts, cam_rgb_frames, cam_depth_frames,
+def align_frames_to_reference(ref_ts, cam_rgb_ts, cam_rgb_frames,
                               cam_ir_left_frames=None, cam_ir_right_frames=None):
     """Align a camera's frames to reference timestamps using nearest-neighbor matching.
 
     Uses a greedy forward search: for each reference timestamp, finds the closest
     camera frame timestamp (only advancing forward through the camera timestamps).
 
-    Returns (synced_rgb_frames, synced_depth_frames, synced_ir_left_frames,
-    synced_ir_right_frames, synced_timestamps). IR lists are None if not provided.
+    Returns (synced_rgb_frames, synced_ir_left_frames, synced_ir_right_frames,
+    synced_timestamps). IR lists are None if not provided.
     """
     synced_rgb_frames = []
-    synced_depth_frames = []
     synced_ir_left_frames = [] if cam_ir_left_frames is not None else None
     synced_ir_right_frames = [] if cam_ir_right_frames is not None else None
     synced_timestamps = []
@@ -55,14 +48,13 @@ def align_frames_to_reference(ref_ts, cam_rgb_ts, cam_rgb_frames, cam_depth_fram
             t_idx += 1
 
         synced_rgb_frames.append(cam_rgb_frames[t_idx])
-        synced_depth_frames.append(cam_depth_frames[t_idx])
         if synced_ir_left_frames is not None:
             synced_ir_left_frames.append(cam_ir_left_frames[t_idx])
         if synced_ir_right_frames is not None:
             synced_ir_right_frames.append(cam_ir_right_frames[t_idx])
         synced_timestamps.append(cam_rgb_ts[t_idx])
 
-    return synced_rgb_frames, synced_depth_frames, synced_ir_left_frames, synced_ir_right_frames, synced_timestamps
+    return synced_rgb_frames, synced_ir_left_frames, synced_ir_right_frames, synced_timestamps
 
 
 def nearest_neighbor_indices(ref_ts, source_ts):
@@ -114,26 +106,21 @@ class ACMEWriter:
             self._path.mkdir()
             self._rgb_path = self._path / "rgb.mp4"
             self._fps = fps
-            self._depth_store = zarr.DirectoryStore(str(self._path / "depth.zarr"))
             self._ir_left_store = zarr.DirectoryStore(str(self._path / "ir_left.zarr"))
             self._ir_right_store = zarr.DirectoryStore(str(self._path / "ir_right.zarr"))
-            self._depth_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint16)
             self._ir_left_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint8)
             self._ir_right_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width), dtype=np.uint8)
             self.col_tmstmps = np.zeros((max_episode_len,))
-            self.depth_tmstmps = np.zeros((max_episode_len,))
             self._rgb_cache = np.zeros((max_episode_len, self._frame_height, self._frame_width, 3), dtype=np.uint8)
             self._save_interval = 1
 
-        def write_frame(self, color, col_tmstmp, depth, depth_tmstmp, ir_left, ir_right):
+        def write_frame(self, color, col_tmstmp, ir_left, ir_right):
             if self.highest_written_index >= self._max_episode_len:
                 raise IndexError
             self._rgb_cache[self.highest_written_index] = color
-            self._depth_cache[self.highest_written_index] = depth
             self._ir_left_cache[self.highest_written_index] = ir_left
             self._ir_right_cache[self.highest_written_index] = ir_right
             self.col_tmstmps[self.highest_written_index] = col_tmstmp
-            self.depth_tmstmps[self.highest_written_index] = depth_tmstmp
             self.highest_written_index += 1
 
     def __init__(self, path: Path, max_episode_len: int, serials: List[str], instruction: str,
@@ -162,8 +149,8 @@ class ACMEWriter:
             cap_writers[serial] = cw
         return cap_writers
 
-    def write_capture_frame(self, serial: str, col_tmstmp, depth_tmstmp, color, depth, ir_left, ir_right):
-        self._captures[serial].write_frame(color, col_tmstmp, depth, depth_tmstmp, ir_left, ir_right)
+    def write_capture_frame(self, serial: str, col_tmstmp, color, ir_left, ir_right):
+        self._captures[serial].write_frame(color, col_tmstmp, ir_left, ir_right)
 
     def write_state(self, timestamp=None, **state):
         if timestamp is not None:
@@ -201,9 +188,8 @@ class ACMEWriter:
             return
 
         all_rgb_ts = [c.col_tmstmps[:c.highest_written_index] for c in captures]
-        all_depth_ts = [c.depth_tmstmps[:c.highest_written_index] for c in captures]
 
-        t0, t1 = compute_sync_window(all_rgb_ts, all_depth_ts)
+        t0, t1 = compute_sync_window(all_rgb_ts)
 
         ref_ts = all_rgb_ts[0]
         ref_mask = (ref_ts >= t0) & (ref_ts <= t1)
@@ -212,24 +198,17 @@ class ACMEWriter:
 
         global_synced = []
         for cap in captures:
-            depth_frames = cap._depth_cache[:cap.highest_written_index]
             rgb_frames = cap._rgb_cache[:cap.highest_written_index]
             ir_left_frames = cap._ir_left_cache[:cap.highest_written_index]
             ir_right_frames = cap._ir_right_cache[:cap.highest_written_index]
             rgb_ts = cap.col_tmstmps[:cap.highest_written_index]
 
-            synced_rgb, synced_depth, synced_ir_left, synced_ir_right, synced_ts = align_frames_to_reference(
-                ref_ts, rgb_ts, rgb_frames, depth_frames, ir_left_frames, ir_right_frames
+            synced_rgb, synced_ir_left, synced_ir_right, synced_ts = align_frames_to_reference(
+                ref_ts, rgb_ts, rgb_frames, ir_left_frames, ir_right_frames
             )
-            global_synced.append((cap, synced_rgb, synced_depth, synced_ir_left, synced_ir_right, synced_ts))
+            global_synced.append((cap, synced_rgb, synced_ir_left, synced_ir_right, synced_ts))
 
-        for cap, rgb_frames, depth_frames, ir_left_frames, ir_right_frames, synced_timestamps in global_synced:
-            # depth
-            zarr.array(np.array(depth_frames, dtype=np.int16),
-                       chunks=(16, None, None),
-                       dtype=np.int16,
-                       store=cap._depth_store)
-
+        for cap, rgb_frames, ir_left_frames, ir_right_frames, synced_timestamps in global_synced:
             # ir left
             zarr.array(np.array(ir_left_frames, dtype=np.uint8),
                        chunks=(16, None, None),

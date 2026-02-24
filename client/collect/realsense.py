@@ -34,31 +34,44 @@ class RSBagProcessor:
                 print(f"Skipping bag {bag_path.name}: {e}")
                 continue
 
+    def extract_intrinsics(self, profile, serial: str, bag_path: Path):
+        dep_profile = profile.get_stream(rs.stream.depth)
+        col_profile = profile.get_stream(rs.stream.color)
+        ir1_profile = profile.get_stream(rs.stream.infrared, 1)
+        ir2_profile = profile.get_stream(rs.stream.infrared, 2)
+
+        dep_intr = dep_profile.as_video_stream_profile().get_intrinsics()
+        col_intr = col_profile.as_video_stream_profile().get_intrinsics()
+        ir_intr = ir1_profile.as_video_stream_profile().get_intrinsics()
+        ir_extr = ir1_profile.get_extrinsics_to(ir2_profile)
+
+        np.savez(bag_path.parent / f"{serial}_intrinsics.npz",
+                 depth=np.asarray([dep_intr.fx, dep_intr.fy, dep_intr.ppx, dep_intr.ppy]),
+                 color=np.asarray([col_intr.fx, col_intr.fy, col_intr.ppx, col_intr.ppy]),
+                 ir=np.asarray([ir_intr.fx, ir_intr.fy, ir_intr.ppx, ir_intr.ppy]),
+                 ir_baseline=np.asarray(ir_extr.translation))
+
     def process_frames_for_bag(self, serial: str, bag_path: Path):
         pipeline = rs.pipeline()
         config = rs.config()
         config.enable_device_from_file(str(bag_path), repeat_playback=False)
-        pipeline.start(config)
-        align = rs.align(rs.stream.color)
+        profile = pipeline.start(config)
+        self.extract_intrinsics(profile, serial, bag_path)
 
         try:
             while True:
                 frames = pipeline.wait_for_frames()
-                aligned_frames = align.process(frames)
 
-                color_frame = aligned_frames.get_color_frame()
-                depth_frame = aligned_frames.get_depth_frame()
+                color_frame = frames.get_color_frame()
                 ir_left_frame = frames.get_infrared_frame(1)
                 ir_right_frame = frames.get_infrared_frame(2)
 
                 color = np.asanyarray(color_frame.get_data())
-                depth = np.asanyarray(depth_frame.get_data())
                 ir_left = np.asanyarray(ir_left_frame.get_data())
                 ir_right = np.asanyarray(ir_right_frame.get_data())
 
                 col_tmstmp = self.get_tmstmp(color_frame)
-                dep_tmstmp = self.get_tmstmp(depth_frame)
-                yield color, col_tmstmp, depth, dep_tmstmp, ir_left, ir_right, serial
+                yield color, col_tmstmp, ir_left, ir_right, serial
 
         except RuntimeError as e:
             print(f"Error while processing bag {bag_path}: {e}")
@@ -104,7 +117,7 @@ class RealSenseInterface:
         self._width = width
         self._height = height
         self._fps = fps
-        self._all_intr = []
+        self._all_intr = {}
         self._counts_lock = threading.Lock()
         self._serials: List[str] = []
         self._serial_to_idx = {}
@@ -166,11 +179,26 @@ class RealSenseInterface:
             recorder.pause()
             recorders.append(recorder)
 
-            dep = profile.get_stream(rs.stream.depth)
-            intr = dep.as_video_stream_profile().get_intrinsics()
-            intr_vals = intr.fx, intr.fy, intr.ppx, intr.ppy
-            print(f"Camera {serial} intrinsics: {intr_vals})")
-            self._all_intr.append(np.asarray(intr_vals))
+            dep_profile = profile.get_stream(rs.stream.depth)
+            col_profile = profile.get_stream(rs.stream.color)
+            ir1_profile = profile.get_stream(rs.stream.infrared, 1)
+            ir2_profile = profile.get_stream(rs.stream.infrared, 2)
+
+            dep_intr = dep_profile.as_video_stream_profile().get_intrinsics()
+            col_intr = col_profile.as_video_stream_profile().get_intrinsics()
+            ir_intr = ir1_profile.as_video_stream_profile().get_intrinsics()
+            ir_extr = ir1_profile.get_extrinsics_to(ir2_profile)
+
+            self._all_intr[serial] = {
+                "depth": np.asarray([dep_intr.fx, dep_intr.fy, dep_intr.ppx, dep_intr.ppy]),
+                "color": np.asarray([col_intr.fx, col_intr.fy, col_intr.ppx, col_intr.ppy]),
+                "ir": np.asarray([ir_intr.fx, ir_intr.fy, ir_intr.ppx, ir_intr.ppy]),
+                "ir_baseline": np.asarray(ir_extr.translation),
+            }
+            print(f"Camera {serial} depth intrinsics: {self._all_intr[serial]['depth']}")
+            print(f"Camera {serial} color intrinsics: {self._all_intr[serial]['color']}")
+            print(f"Camera {serial} IR intrinsics: {self._all_intr[serial]['ir']}")
+            print(f"Camera {serial} IR baseline: {self._all_intr[serial]['ir_baseline']}")
 
             col_sensor = profile.get_device().query_sensors()[1]
             col_sensor.set_option(rs.option.enable_auto_exposure, 0)
@@ -180,7 +208,11 @@ class RealSenseInterface:
             started.append(pipe)
 
         if self._all_intr:
-            np.save(self._path / "intrinsics.npy", np.stack(self._all_intr))
+            np.savez(self._path / "intrinsics.npz", **{
+                f"{serial}_{key}": val
+                for serial, data in self._all_intr.items()
+                for key, val in data.items()
+            })
 
         # Phase 2: Run on_warmup callback (e.g. gripper homing) concurrently
         # with the warmup drain.

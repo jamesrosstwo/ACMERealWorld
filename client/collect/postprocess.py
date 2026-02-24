@@ -41,9 +41,9 @@ def gather_data(episodes_path: str, n_frames: int, writer_cfg: DictConfig, reals
             writer = ACMEWriter(ep_path, serials=serials, **writer_cfg)
             rs_interface = RSBagProcessor(bagpaths, **realsense)
             print(f"found {len(bagpaths)} bags: {serials}")
-            for color, color_tmstmp, depth, depth_tmstmp, ir_left, ir_right, serial in tqdm(rs_interface.process_all_frames()):
+            for color, color_tmstmp, ir_left, ir_right, serial in tqdm(rs_interface.process_all_frames()):
                 try:
-                    writer.write_capture_frame(serial, color_tmstmp, depth_tmstmp, color, depth, ir_left, ir_right)
+                    writer.write_capture_frame(serial, color_tmstmp, color, ir_left, ir_right)
                 except IndexError:
                     continue
             writer.flush()
