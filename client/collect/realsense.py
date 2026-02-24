@@ -28,7 +28,11 @@ class RSBagProcessor:
     def process_all_frames(self):
         for bag_path in self.bag_paths:
             serial = bag_path.stem
-            yield from self.process_frames_for_bag(serial, bag_path)
+            try:
+                yield from self.process_frames_for_bag(serial, bag_path)
+            except RuntimeError as e:
+                print(f"Skipping bag {bag_path.name}: {e}")
+                continue
 
     def process_frames_for_bag(self, serial: str, bag_path: Path):
         pipeline = rs.pipeline()
@@ -44,13 +48,17 @@ class RSBagProcessor:
 
                 color_frame = aligned_frames.get_color_frame()
                 depth_frame = aligned_frames.get_depth_frame()
+                ir_left_frame = frames.get_infrared_frame(1)
+                ir_right_frame = frames.get_infrared_frame(2)
 
                 color = np.asanyarray(color_frame.get_data())
                 depth = np.asanyarray(depth_frame.get_data())
+                ir_left = np.asanyarray(ir_left_frame.get_data())
+                ir_right = np.asanyarray(ir_right_frame.get_data())
 
                 col_tmstmp = self.get_tmstmp(color_frame)
                 dep_tmstmp = self.get_tmstmp(depth_frame)
-                yield color, col_tmstmp, depth, dep_tmstmp, serial
+                yield color, col_tmstmp, depth, dep_tmstmp, ir_left, ir_right, serial
 
         except RuntimeError as e:
             print(f"Error while processing bag {bag_path}: {e}")
@@ -124,6 +132,8 @@ class RealSenseInterface:
             cfg.enable_device(serial)
             cfg.enable_stream(rs.stream.depth, self._width, self._height, rs.format.z16, self._fps)
             cfg.enable_stream(rs.stream.color, self._width, self._height, rs.format.bgr8, self._fps)
+            cfg.enable_stream(rs.stream.infrared, 1, self._width, self._height, rs.format.y8, self._fps)
+            cfg.enable_stream(rs.stream.infrared, 2, self._width, self._height, rs.format.y8, self._fps)
             bag_path = str(self._path / f"{serial}.bag")
             cfg.enable_record_to_file(bag_path)
 

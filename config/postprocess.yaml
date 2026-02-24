@@ -9,7 +9,7 @@ realsense:
 
 writer:
   max_episode_len: ${max_episode_timesteps}
-  instruction: "Push the green T shape into the black outline of the T shape on the table"
+  instruction: "Pick up the green mug and place it into the sink"
   captures:
     frame_width: ${realsense.width}
     frame_height: ${realsense.height}
