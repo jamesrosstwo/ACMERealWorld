@@ -17,6 +17,7 @@ realsense:
   width: 1280
   height: 720
   fps: 15
+  laser_power: 0  # IR projector power (0=off, 1-360mW). 0 recommended for FoundationStereo.
 
 writer:
   max_episode_len: ${max_episode_timesteps}

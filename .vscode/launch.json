@@ -28,7 +28,10 @@
       "module": "client.postprocess",
       "python": "/home/james/anaconda3/envs/ACMEReal/bin/python",
       "cwd": "${workspaceFolder}",
-      "justMyCode": true
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}:${workspaceFolder}/submodules/FoundationStereo"
+      }
     }
   ]
 }

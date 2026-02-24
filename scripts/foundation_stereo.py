@@ -17,6 +17,8 @@ import sys
 import os
 from pathlib import Path
 
+import yaml
+
 import numpy as np
 import torch
 import zarr
@@ -46,7 +48,7 @@ def load_model(ckpt_dir: str, scale: float = 1.0, valid_iters: int = 32):
     args = OmegaConf.create(cfg)
 
     model = FoundationStereo(args)
-    ckpt = torch.load(ckpt_dir, map_location="cpu")
+    ckpt = torch.load(ckpt_dir, map_location="cpu", weights_only=False)
     model.load_state_dict(ckpt["model"])
     model.cuda()
     model.eval()
@@ -158,14 +160,16 @@ def process_episode(ep_path: Path, ckpt_dir: str, model=None, args=None,
             log.warning("Missing IR zarr for %s, skipping", cap_dir.name)
             continue
 
-        # Load intrinsics
-        intr_file = ep_path / f"{serial}_intrinsics.npz"
-        if not intr_file.exists():
-            log.warning("Missing intrinsics file %s, skipping", intr_file)
+        # Load calibration
+        calib_file = cap_dir / "calibration.yaml"
+        if not calib_file.exists():
+            log.warning("Missing calibration file %s, skipping", calib_file)
             continue
-        intr = np.load(intr_file)
-        focal_length = float(intr["ir"][0])  # fx
-        baseline = float(np.abs(intr["ir_baseline"][0]))  # x-component of translation
+        with open(calib_file) as f:
+            calib = yaml.safe_load(f)
+        focal_length = calib["intrinsics"]["ir"][0]  # fx
+        T_ir = calib["extrinsics"]["T_ir1_to_ir2"]
+        baseline = abs(T_ir[0][3])  # x-component of translation
 
         ir_left_arr = zarr.open(str(ir_left_path), mode="r")
         ir_right_arr = zarr.open(str(ir_right_path), mode="r")

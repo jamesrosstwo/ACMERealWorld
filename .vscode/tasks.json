@@ -18,7 +18,7 @@
     {
       "label": "Postprocess",
       "type": "shell",
-      "command": "conda run -n ACMEReal --live-stream python -u -m client.postprocess",
+      "command": "conda run -n ACMEReal --live-stream env PYTHONPATH=\"${workspaceFolder}:${workspaceFolder}/submodules/FoundationStereo\" python -u client/postprocess.py",
       "group": "build",
       "problemMatcher": []
     }

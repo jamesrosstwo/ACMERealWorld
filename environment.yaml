@@ -1,4 +1,4 @@
-name: ACMEReal
+name: ACMERealWorld
 channels:
   - defaults
   - pytorch

@@ -17,14 +17,13 @@ writer:
     fps: ${realsense.fps}
 
 stereo:
-  enabled: false
-  ckpt_dir: "./third_party/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth"
+  enabled: true
+  ckpt_dir: "./submodules/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth"
   scale: 1.0
   valid_iters: 32
 
 hydra:
   output_subdir: null
-  job_logging: null
 
   run:
     dir: .

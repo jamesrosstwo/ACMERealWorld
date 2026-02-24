@@ -128,7 +128,7 @@ class ACMEWriter:
         self.path = path
         assert self.path.exists()
         self.instruction = instruction
-        self._store = zarr.DirectoryStore(str(self.path / "episode.zarr"))
+        self._store = zarr.DirectoryStore(str(self.path / "raw_episode.zarr"))
         self._root = zarr.group(store=self._store)
         self._max_episode_len = max_episode_len
         self._captures: Dict[str, ACMEWriter._CaptureWriter] = self._init_captures(serials, captures)
@@ -233,31 +233,30 @@ class ACMEWriter:
             with open(str(cap._path / "timestamps.npy"), "wb") as f:
                 np.savez(f, np.asarray(synced_timestamps))
 
-        state = zarr.open_group(str(self.path / "episode.zarr"), mode="r+")
+        raw_state = zarr.open_group(str(self.path / "raw_episode.zarr"), mode="r")
+        synced_store = zarr.DirectoryStore(str(self.path / "episode.zarr"))
+        synced_root = zarr.group(store=synced_store)
         # Align state entries to the synced reference timestamps.
-        if '_state_timestamps' in state:
+        if '_state_timestamps' in raw_state:
             # Use recorded state timestamps for proper nearest-neighbor alignment.
             # The array is zero-initialized; valid timestamps are always > 0,
             # so the first zero marks the end of valid entries.
-            state_ts_arr = np.array(state['_state_timestamps'])
+            state_ts_arr = np.array(raw_state['_state_timestamps'])
             nonzero = state_ts_arr != 0
             n_state = len(state_ts_arr) if nonzero.all() else int(np.argmin(nonzero))
             state_ts = state_ts_arr[:n_state]
             sync_indices = nearest_neighbor_indices(ref_ts, state_ts)
-            del state['_state_timestamps']
-            for key, arr in list(state.items()):
-                data = np.array(arr)[:n_state]
-                state.create_dataset(f"{key}_original", data=data)
-                del state[key]
-                state.create_dataset(f"{key}", data=data[sync_indices])
+            for key in raw_state:
+                if key == '_state_timestamps':
+                    continue
+                data = np.array(raw_state[key])[:n_state]
+                synced_root.create_dataset(key, data=data[sync_indices])
         else:
             # Legacy fallback: no state timestamps, assume 1:1 with primary camera
             n_state = captures[0].highest_written_index
-            for key, arr in list(state.items()):
-                data = np.array(arr)[:n_state]
-                state.create_dataset(f"{key}_original", data=data)
-                del state[key]
-                state.create_dataset(f"{key}", data=data[ref_mask])
+            for key in raw_state:
+                data = np.array(raw_state[key])[:n_state]
+                synced_root.create_dataset(key, data=data[ref_mask])
 
         metadata = dict(
             n_timesteps=sync_len,

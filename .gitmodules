@@ -1,3 +1,6 @@
 [submodule "submodules/gello_software"]
 	path = submodules/gello_software
 	url = git@github.com:rvl-lab-utoronto/gello_software.git
+[submodule "submodules/FoundationStereo"]
+	path = submodules/FoundationStereo
+	url = https://github.com/NVlabs/FoundationStereo.git

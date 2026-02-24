@@ -11,10 +11,39 @@ import traceback
 from typing import Callable
 import pyrealsense2 as rs
 import numpy as np
+import yaml
 from pathlib import Path
 from typing import List
 
 from client.utils import enumerate_devices
+
+
+def _extrinsics_to_4x4(extr) -> np.ndarray:
+    """Convert a pyrealsense2 extrinsics object to a 4x4 homogeneous matrix."""
+    T = np.eye(4, dtype=np.float64)
+    T[:3, :3] = np.asarray(extr.rotation).reshape(3, 3)
+    T[:3, 3] = np.asarray(extr.translation)
+    return T
+
+
+def _build_calibration(dep_profile, col_profile, ir1_profile, ir2_profile) -> dict:
+    """Build a calibration dict from RealSense stream profiles."""
+    dep_intr = dep_profile.as_video_stream_profile().get_intrinsics()
+    col_intr = col_profile.as_video_stream_profile().get_intrinsics()
+    ir_intr = ir1_profile.as_video_stream_profile().get_intrinsics()
+
+    return {
+        "intrinsics": {
+            "depth": [dep_intr.fx, dep_intr.fy, dep_intr.ppx, dep_intr.ppy],
+            "color": [col_intr.fx, col_intr.fy, col_intr.ppx, col_intr.ppy],
+            "ir": [ir_intr.fx, ir_intr.fy, ir_intr.ppx, ir_intr.ppy],
+        },
+        "extrinsics": {
+            "T_ir1_to_ir2": _extrinsics_to_4x4(ir1_profile.get_extrinsics_to(ir2_profile)).tolist(),
+            "T_color_to_ir1": _extrinsics_to_4x4(col_profile.get_extrinsics_to(ir1_profile)).tolist(),
+            "T_depth_to_color": _extrinsics_to_4x4(dep_profile.get_extrinsics_to(col_profile)).tolist(),
+        },
+    }
 
 
 class RSBagProcessor:
@@ -34,29 +63,23 @@ class RSBagProcessor:
                 print(f"Skipping bag {bag_path.name}: {e}")
                 continue
 
-    def extract_intrinsics(self, profile, serial: str, bag_path: Path):
-        dep_profile = profile.get_stream(rs.stream.depth)
-        col_profile = profile.get_stream(rs.stream.color)
-        ir1_profile = profile.get_stream(rs.stream.infrared, 1)
-        ir2_profile = profile.get_stream(rs.stream.infrared, 2)
-
-        dep_intr = dep_profile.as_video_stream_profile().get_intrinsics()
-        col_intr = col_profile.as_video_stream_profile().get_intrinsics()
-        ir_intr = ir1_profile.as_video_stream_profile().get_intrinsics()
-        ir_extr = ir1_profile.get_extrinsics_to(ir2_profile)
-
-        np.savez(bag_path.parent / f"{serial}_intrinsics.npz",
-                 depth=np.asarray([dep_intr.fx, dep_intr.fy, dep_intr.ppx, dep_intr.ppy]),
-                 color=np.asarray([col_intr.fx, col_intr.fy, col_intr.ppx, col_intr.ppy]),
-                 ir=np.asarray([ir_intr.fx, ir_intr.fy, ir_intr.ppx, ir_intr.ppy]),
-                 ir_baseline=np.asarray(ir_extr.translation))
+    def extract_calibration(self, profile, serial: str, bag_path: Path):
+        calib = _build_calibration(
+            profile.get_stream(rs.stream.depth),
+            profile.get_stream(rs.stream.color),
+            profile.get_stream(rs.stream.infrared, 1),
+            profile.get_stream(rs.stream.infrared, 2),
+        )
+        cap_dir = bag_path.parent / "captures" / f"capture_{serial}"
+        with open(cap_dir / "calibration.yaml", "w") as f:
+            yaml.dump(calib, f, default_flow_style=None, sort_keys=False)
 
     def process_frames_for_bag(self, serial: str, bag_path: Path):
         pipeline = rs.pipeline()
         config = rs.config()
         config.enable_device_from_file(str(bag_path), repeat_playback=False)
         profile = pipeline.start(config)
-        self.extract_intrinsics(profile, serial, bag_path)
+        self.extract_calibration(profile, serial, bag_path)
 
         try:
             while True:
@@ -110,14 +133,15 @@ class RealSenseInterface:
     def serials(self) -> List[str]:
         return list(self._serials)
 
-    def __init__(self, path: Path, *, n_frames: int, width: int, height: int, fps: int):
+    def __init__(self, path: Path, *, n_frames: int, width: int, height: int, fps: int, laser_power: int):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self._path = path
         self._n_frames = n_frames
         self._width = width
         self._height = height
         self._fps = fps
-        self._all_intr = {}
+        self._laser_power = laser_power
+        self._all_calib = {}
         self._counts_lock = threading.Lock()
         self._serials: List[str] = []
         self._serial_to_idx = {}
@@ -184,21 +208,14 @@ class RealSenseInterface:
             ir1_profile = profile.get_stream(rs.stream.infrared, 1)
             ir2_profile = profile.get_stream(rs.stream.infrared, 2)
 
-            dep_intr = dep_profile.as_video_stream_profile().get_intrinsics()
-            col_intr = col_profile.as_video_stream_profile().get_intrinsics()
-            ir_intr = ir1_profile.as_video_stream_profile().get_intrinsics()
-            ir_extr = ir1_profile.get_extrinsics_to(ir2_profile)
+            self._all_calib[serial] = _build_calibration(
+                dep_profile, col_profile, ir1_profile, ir2_profile,
+            )
+            print(f"Camera {serial} calibration: {self._all_calib[serial]['intrinsics']}")
 
-            self._all_intr[serial] = {
-                "depth": np.asarray([dep_intr.fx, dep_intr.fy, dep_intr.ppx, dep_intr.ppy]),
-                "color": np.asarray([col_intr.fx, col_intr.fy, col_intr.ppx, col_intr.ppy]),
-                "ir": np.asarray([ir_intr.fx, ir_intr.fy, ir_intr.ppx, ir_intr.ppy]),
-                "ir_baseline": np.asarray(ir_extr.translation),
-            }
-            print(f"Camera {serial} depth intrinsics: {self._all_intr[serial]['depth']}")
-            print(f"Camera {serial} color intrinsics: {self._all_intr[serial]['color']}")
-            print(f"Camera {serial} IR intrinsics: {self._all_intr[serial]['ir']}")
-            print(f"Camera {serial} IR baseline: {self._all_intr[serial]['ir_baseline']}")
+            depth_sensor = profile.get_device().query_sensors()[0]
+            depth_sensor.set_option(rs.option.laser_power, self._laser_power)
+            print(f"Camera {serial} IR laser power: {self._laser_power}")
 
             col_sensor = profile.get_device().query_sensors()[1]
             col_sensor.set_option(rs.option.enable_auto_exposure, 0)
@@ -207,12 +224,12 @@ class RealSenseInterface:
 
             started.append(pipe)
 
-        if self._all_intr:
-            np.savez(self._path / "intrinsics.npz", **{
-                f"{serial}_{key}": val
-                for serial, data in self._all_intr.items()
-                for key, val in data.items()
-            })
+        if self._all_calib:
+            captures_dir = self._path / "captures"
+            for serial, calib in self._all_calib.items():
+                cap_dir = captures_dir / f"capture_{serial}"
+                with open(cap_dir / "calibration.yaml", "w") as f:
+                    yaml.dump(calib, f, default_flow_style=None, sort_keys=False)
 
         # Phase 2: Run on_warmup callback (e.g. gripper homing) concurrently
         # with the warmup drain.
