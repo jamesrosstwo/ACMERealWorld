@@ -1,5 +1,5 @@
-max_episode_timesteps: 800
-episodes_path: "/home/james/ACME/data/mug_stereo"
+max_episode_timesteps: 250
+episodes_path: "/home/james/ACME/data/mug_two"
 
 realsense:
   n_frames: ${max_episode_timesteps}
@@ -21,6 +21,13 @@ stereo:
   ckpt_dir: "./submodules/FoundationStereo/pretrained_models/23-51-11/model_best_bp2.pth"
   scale: 1.0
   valid_iters: 32
+  depth_min_mm: 1
+  depth_max_mm: 3000
+  # Post-processing (RealSense-style spatial filter + hole filling)
+  spatial_kernel: 5        # median filter kernel size (odd, 3 or 5)
+  spatial_iters: 2         # number of spatial filter passes
+  hole_fill_mode: farthest # left | farthest | nearest
+  hole_fill_max_radius: 2  # max fill distance in px (0 to disable)
 
 hydra:
   output_subdir: null

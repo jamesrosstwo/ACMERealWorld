@@ -92,14 +92,20 @@ def _depth_worker(gpu_id: int, work_queue: queue.Queue, stereo_cfg: DictConfig):
         if ep_path is None:
             break
         try:
-            process_episode(ep_path, stereo_cfg.ckpt_dir, model=model, args=model_args)
+            process_episode(ep_path, stereo_cfg.ckpt_dir, model=model, args=model_args,
+                           depth_min_mm=stereo_cfg.get("depth_min_mm", 1),
+                           depth_max_mm=stereo_cfg.get("depth_max_mm", 3000),
+                           spatial_kernel=stereo_cfg.get("spatial_kernel", 5),
+                           spatial_iters=stereo_cfg.get("spatial_iters", 2),
+                           hole_fill_mode=stereo_cfg.get("hole_fill_mode", "farthest"),
+                           hole_fill_max_radius=stereo_cfg.get("hole_fill_max_radius", 2))
         except Exception:
             log.exception("Depth processing failed for %s on GPU %d", ep_path, gpu_id)
         finally:
             work_queue.task_done()
 
 
-@hydra.main(config_path="../config", config_name="postprocess", version_base=None)
+@hydra.main(config_path="../config", config_name="postprocess")
 def main(cfg: DictConfig):
     cfg = OmegaConf.to_container(cfg, resolve=True)
     cfg = OmegaConf.create(cfg)

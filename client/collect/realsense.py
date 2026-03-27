@@ -21,7 +21,8 @@ from client.utils import enumerate_devices
 def _extrinsics_to_4x4(extr) -> np.ndarray:
     """Convert a pyrealsense2 extrinsics object to a 4x4 homogeneous matrix."""
     T = np.eye(4, dtype=np.float64)
-    T[:3, :3] = np.asarray(extr.rotation).reshape(3, 3)
+    # pyrealsense2 stores rotation in column-major order
+    T[:3, :3] = np.asarray(extr.rotation).reshape(3, 3, order='F')
     T[:3, 3] = np.asarray(extr.translation)
     return T
 
@@ -208,10 +209,11 @@ class RealSenseInterface:
             ir1_profile = profile.get_stream(rs.stream.infrared, 1)
             ir2_profile = profile.get_stream(rs.stream.infrared, 2)
 
-            self._all_calib[serial] = _build_calibration(
+            calib = _build_calibration(
                 dep_profile, col_profile, ir1_profile, ir2_profile,
             )
-            print(f"Camera {serial} calibration: {self._all_calib[serial]['intrinsics']}")
+            self._all_calib[serial] = calib
+            print(f"Camera {serial} calibration: {calib['intrinsics']}")
 
             depth_sensor = profile.get_device().query_sensors()[0]
             depth_sensor.set_option(rs.option.laser_power, self._laser_power)
@@ -223,13 +225,6 @@ class RealSenseInterface:
             col_sensor.set_option(rs.option.gain, 128)
 
             started.append(pipe)
-
-        if self._all_calib:
-            captures_dir = self._path / "captures"
-            for serial, calib in self._all_calib.items():
-                cap_dir = captures_dir / f"capture_{serial}"
-                with open(cap_dir / "calibration.yaml", "w") as f:
-                    yaml.dump(calib, f, default_flow_style=None, sort_keys=False)
 
         # Phase 2: Run on_warmup callback (e.g. gripper homing) concurrently
         # with the warmup drain.
