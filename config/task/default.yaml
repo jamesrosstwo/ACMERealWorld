@@ -1,0 +1,21 @@
+# @package _group_
+# Default task configuration. Task-specific configs override these values.
+
+home_pos: [0.30582778, 0., 0.48467681]
+home_rot: [1., 0., 0., 0.]
+
+pos_mask: [true, true, true]
+
+freeze_rotation: false
+freeze_gripper: false
+
+gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
+
+impedance:
+  # Polymetis franka_hardware.yaml defaults (exact match).
+  translational_stiffness: [750, 750, 750]  # N/m
+  rotational_stiffness: [15, 15, 15]        # Nm/rad
+  translational_damping: [37, 37, 37]       # N·s/m
+  rotational_damping: [2, 2, 2]             # Nm·s/rad
+  nullspace_stiffness: [40, 30, 50, 25, 35, 25, 10]  # Nm/rad (Kq)
+  nullspace_damping: [4, 6, 5, 5, 3, 2, 1]            # Nm·s/rad (Kqd)

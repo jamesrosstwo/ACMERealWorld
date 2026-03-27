@@ -33,7 +33,7 @@ This installs Python 3.10 and all core dependencies:
 | Package | Purpose |
 |---------|---------|
 | `pyrealsense2` / `librealsense` | Intel RealSense camera SDK and Python bindings |
-| `panda-python` | Franka Panda robot control (panda_py / libfranka) |
+| `panda-python` | Franka Panda robot control (panda_py / libfranka) — [custom fork](https://github.com/jamesrosstwo/panda-py/tree/polymetis-impedance) with `PolymetisImpedance` controller |
 | `torch` | PyTorch (used by FoundationStereo and policy inference) |
 | `hydra-core` | Configuration management |
 | `zarr` / `blosc` | Chunked array storage for episode data |

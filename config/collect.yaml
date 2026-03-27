@@ -1,7 +1,7 @@
 defaults:
   - task: pusht
 
-max_episode_timesteps: 250
+max_episode_timesteps: ${task.max_episode_timesteps}
 episodes_path: "/mnt/ssd/james/episodes"
 
 nuc:
@@ -10,7 +10,8 @@ nuc:
   home_pos: ${task.home_pos}
   home_rot: ${task.home_rot}
   server:
-    gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
+    gripper_hysteresis: ${task.gripper_hysteresis}
+    impedance: ${task.impedance}
 
 realsense:
   n_frames: ${max_episode_timesteps}

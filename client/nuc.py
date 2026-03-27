@@ -15,7 +15,7 @@ import panda_py
 
 
 class GripperInterface:
-    def __init__(self, ip_address: str, hysteresis: float = 0.1):
+    def __init__(self, ip_address: str, hysteresis: float):
         print(f"Initializing GripperInterface via panda-py at {ip_address}")
         self._gripper = panda_py.libfranka.Gripper(ip_address)
 
@@ -86,7 +86,7 @@ class NUCInterface:
         return self._home_pos.copy(), self._home_rot.copy()
 
     def __init__(self, ip: str, server: DictConfig, franka_ip: str,
-                 home_pos=(0.30582778, 0., 0.48467681), home_rot=(1., 0., 0., 0.)):
+                 home_pos=None, home_rot=None):
         self._franka_ip = franka_ip
         self._nuc_ip = ip
         self._server_cfg = server
@@ -97,7 +97,7 @@ class NUCInterface:
         self._panda = panda_py.Panda(self._franka_ip)
         self._controller = None
 
-        hysteresis = getattr(server, 'gripper_hysteresis', 0.1)
+        hysteresis = server.gripper_hysteresis
         self._gripper = GripperInterface(self._franka_ip, hysteresis=hysteresis)
 
         self._desired_eef_pos = self._panda.get_position()
@@ -148,17 +148,23 @@ class NUCInterface:
         self._panda.move_to_pose([home_pos], [home_rot])
 
     def start(self):
-        try:
-            from panda_py import controllers
-            impedance = np.eye(6)
-            impedance[:3, :3] *= 400   # translational stiffness (N/m)
-            impedance[3:, 3:] *= 60    # rotational stiffness (Nm/rad)
-            self._controller = controllers.CartesianImpedance(
-                impedance=impedance, nullspace_stiffness=15.0
-            )
-            self._panda.start_controller(self._controller)
-        except ImportError:
-            print("ERROR: panda_py.controllers not found. Control will not work.")
+        from panda_py import controllers
+        imp_cfg = self._server_cfg.impedance
+        trans = list(imp_cfg.translational_stiffness)
+        rot = list(imp_cfg.rotational_stiffness)
+        trans_d = list(imp_cfg.translational_damping)
+        rot_d = list(imp_cfg.rotational_damping)
+        impedance = np.diag(trans + rot).astype(np.float64)
+        damping = np.diag(trans_d + rot_d).astype(np.float64)
+        ns_stiffness = np.array(imp_cfg.nullspace_stiffness, dtype=np.float64)
+        ns_damping = np.array(imp_cfg.nullspace_damping, dtype=np.float64)
+        self._controller = controllers.PolymetisImpedance(
+            impedance=impedance,
+            damping=damping,
+            nullspace_stiffness=ns_stiffness,
+            nullspace_damping=ns_damping,
+        )
+        self._panda.start_controller(self._controller)
 
     def close(self):
         if self._controller:

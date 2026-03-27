@@ -1,4 +1,7 @@
 # @package _group_
+defaults:
+  - default
+
 instruction: "Push the green T shape into the black outline of the T shape on the table"
 
 home_pos: [0.425, -0.375, 0.38]
@@ -7,6 +10,8 @@ home_rot: [0.707, 0.707, 0., 0.]
 # Per-axis position mask: true = free (policy controls), false = frozen to home.
 # Frozen dims are zeroed in observations and replaced with home values in commands.
 pos_mask: [true, true, false]   # xy free, z locked to table height
+
+max_episode_timesteps: 250
 
 freeze_rotation: true
 freeze_gripper: true

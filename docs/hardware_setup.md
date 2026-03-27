@@ -57,6 +57,7 @@ You should also be able to access the Franka Desk web interface at `https://192.
 - Use a **gigabit Ethernet switch** — the NUC control loop is latency-sensitive.
 - If your workstation also needs internet access, use a second network interface (e.g. Wi-Fi or a second Ethernet port) for the WAN connection. Do not route the `192.168.1.0/24` subnet through a gateway.
 - The NUC should run a real-time kernel (`PREEMPT_RT`) for reliable 1 kHz Franka control. See the [Franka documentation](https://frankaemika.github.io/docs/) for kernel setup.
+- This project uses a [custom fork of panda-py](https://github.com/jamesrosstwo/panda-py/tree/polymetis-impedance) that adds a `PolymetisImpedance` controller with per-axis Cartesian damping and per-joint nullspace gains (matching [Polymetis/fairo](https://github.com/facebookresearch/fairo) defaults). It is installed automatically via `environment.yaml`.
 
 ---
 

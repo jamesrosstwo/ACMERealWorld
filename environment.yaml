@@ -17,7 +17,7 @@ dependencies:
   - pip:
       - opencv-contrib-python
       - pyrealsense2
-      - panda-python
+      - panda-python @ git+https://github.com/jamesrosstwo/panda-py.git@polymetis-impedance
       - torch
       # FoundationStereo (stereo depth estimation) — install separately:
       #   see docs/foundation_stereo.md
