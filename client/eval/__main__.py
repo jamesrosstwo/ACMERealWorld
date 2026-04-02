@@ -159,6 +159,7 @@ def record_episode(cfg, ep_path, nuc, policy):
 
 @hydra.main(config_path="../../config", config_name="eval")
 def main(cfg: DictConfig):
+    cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
     nuc = NUCInterface(**cfg.nuc)
     policy = EvalPolicyInterface(**cfg.policy)
 

@@ -1,4 +1,4 @@
-name: ACMERealWorld
+name: ACMERealWorldFS
 channels:
   - defaults
   - pytorch

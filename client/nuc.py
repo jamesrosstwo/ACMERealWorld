@@ -142,12 +142,7 @@ class NUCInterface:
         """Calibrate the gripper via homing in a background thread."""
         threading.Thread(target=self._gripper._gripper.homing, daemon=True).start()
 
-    def reset(self):
-        self._panda.move_to_start()
-        home_pos, home_rot = self.home
-        self._panda.move_to_pose([home_pos], [home_rot])
-
-    def start(self):
+    def _make_controller(self):
         from panda_py import controllers
         imp_cfg = self._server_cfg.impedance
         trans = list(imp_cfg.translational_stiffness)
@@ -158,12 +153,20 @@ class NUCInterface:
         damping = np.diag(trans_d + rot_d).astype(np.float64)
         ns_stiffness = np.array(imp_cfg.nullspace_stiffness, dtype=np.float64)
         ns_damping = np.array(imp_cfg.nullspace_damping, dtype=np.float64)
-        self._controller = controllers.PolymetisImpedance(
+        return controllers.PolymetisImpedance(
             impedance=impedance,
             damping=damping,
             nullspace_stiffness=ns_stiffness,
             nullspace_damping=ns_damping,
         )
+
+    def reset(self):
+        home_pos, home_rot = self.home
+        self._panda.move_to_start()
+        self._panda.move_to_pose([home_pos], [home_rot])
+
+    def start(self):
+        self._controller = self._make_controller()
         self._panda.start_controller(self._controller)
 
     def close(self):

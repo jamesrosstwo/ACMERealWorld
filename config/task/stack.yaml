@@ -1,0 +1,22 @@
+# @package _group_
+instruction: "Pick up the object and place it at the target location"
+
+home_pos: [0.30582778, 0., 0.48467681]
+home_rot: [1., 0., 0., 0.]
+
+# Full 6-DOF control with gripper actuation.
+pos_mask: [true, true, true]
+
+freeze_rotation: false
+freeze_gripper: false
+
+max_episode_timesteps: 250
+gripper_hysteresis: 0.1
+
+impedance:
+  translational_stiffness: [750, 750, 750]
+  rotational_stiffness: [15, 15, 15]
+  translational_damping: [37, 37, 37]
+  rotational_damping: [2, 2, 2]
+  nullspace_stiffness: [40, 30, 50, 25, 35, 25, 10]
+  nullspace_damping: [4, 6, 5, 5, 3, 2, 1]

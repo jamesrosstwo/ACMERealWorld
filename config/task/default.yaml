@@ -1,7 +1,7 @@
 # @package _group_
 # Default task configuration. Task-specific configs override these values.
 
-home_pos: [0.30582778, 0., 0.48467681]
+home_pos: [0.30582778, 0., 0.48167681]
 home_rot: [1., 0., 0., 0.]
 
 pos_mask: [true, true, true]

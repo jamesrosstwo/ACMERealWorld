@@ -1,19 +1,20 @@
 # @package _group_
-defaults:
-  - default
-
-instruction: "Pick up the object and place it at the target location"
+instruction: "Pick up the object and place it at in the bucket"
 
 home_pos: [0.30582778, 0., 0.48467681]
 home_rot: [1., 0., 0., 0.]
 
 pos_mask: [true, true, true]
 
+freeze_rotation: false
+freeze_gripper: false
+
+gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
+
 max_episode_timesteps: 250
 
 impedance:
   # Original panda_py CartesianImpedance defaults, converted to explicit gains.
-  # (Previously: stiffness + damping_ratio=1.0, Kd = 2*sqrt(Kp) element-wise)
   translational_stiffness: [400, 400, 400]       # N/m
   rotational_stiffness: [60, 60, 60]             # Nm/rad
   translational_damping: [40, 40, 40]            # N·s/m    (2*sqrt(400) = 40)

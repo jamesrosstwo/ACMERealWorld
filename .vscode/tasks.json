@@ -4,14 +4,14 @@
     {
       "label": "Collect",
       "type": "shell",
-      "command": "conda run -n ACMEReal --live-stream python -u -m client.collect task=${fileBasenameNoExtension}",
+      "command": "conda run -n ACMERealWorldFS --live-stream python -u -m client.collect task=${fileBasenameNoExtension}",
       "group": "build",
       "problemMatcher": []
     },
     {
       "label": "Eval",
       "type": "shell",
-      "command": "conda run -n ACMEReal --live-stream python -u -m client.eval task=${fileBasenameNoExtension}",
+      "command": "conda run -n ACMERealWorldFS --live-stream python -u -m client.eval task=${fileBasenameNoExtension}",
       "group": "test",
       "problemMatcher": []
     },

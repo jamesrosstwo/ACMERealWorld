@@ -17,7 +17,7 @@ from pathlib import Path
 import hydra
 import numpy as np
 import torch
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 from client.nuc import NUCInterface
 from client.collect.realsense import RealSenseInterface
@@ -47,6 +47,7 @@ def action_step(gello: GELLOInterface, nuc: NUCInterface, task_cfg: DictConfig):
 
 @hydra.main(config_path="../../config", config_name="collect")
 def main(cfg: DictConfig):
+    cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
     nuc = NUCInterface(**cfg.nuc)
     gello = GELLOInterface(**cfg.gello)
     base_ep_path = Path(cfg.episodes_path)
