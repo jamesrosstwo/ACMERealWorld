@@ -18,7 +18,7 @@ import numpy as np
 
 class EvalPolicyInterface:
     """
-    Interface for an ACMEPolicy running on some local port
+    Interface for an ACMEPolicy running on a remote or local HTTP server
     """
 
     def __init__(self, control_frequency: float,
@@ -29,7 +29,9 @@ class EvalPolicyInterface:
                  lowdim_keys: List[str],
                  frame_shape: List[int],
                  port: int,
-                 delta_actions: bool = False):
+                 delta_actions: bool = False,
+                 host: str = "localhost",
+                 prompt: str = ""):
         self._control_frequency = control_frequency
         self._obs_history = obs_history
         self._action_horizon = action_horizon
@@ -38,8 +40,10 @@ class EvalPolicyInterface:
         self._lowdim_keys = lowdim_keys
         self._frame_shape = frame_shape
         self._port = port
-        self._server_url = f'http://localhost:{self._port}'
+        self._host = host
+        self._server_url = f'http://{self._host}:{self._port}'
         self._delta_actions = delta_actions
+        self._prompt = prompt
 
     @property
     def obs_history_size(self):
@@ -130,7 +134,8 @@ class EvalPolicyInterface:
             "rgb_keys": ",".join(self._rgb_keys),
             "lowdim_keys": ",".join(self._lowdim_keys),
             "rgb_shape": ",".join(map(str, self._frame_shape)),
-            "obs_steps": str(obs_steps)
+            "obs_steps": str(obs_steps),
+            "prompt": self._prompt,
         })
 
         try:

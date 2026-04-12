@@ -10,6 +10,7 @@ nuc:
   home_pos: ${task.home_pos}
   home_rot: ${task.home_rot}
   server:
+    controller: ${task.controller}
     gripper_hysteresis: ${task.gripper_hysteresis}
     impedance: ${task.impedance}
 

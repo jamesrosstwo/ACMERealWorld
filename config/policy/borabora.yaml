@@ -1,0 +1,5 @@
+defaults:
+  - default
+
+host: 100.92.86.90
+port: 53473

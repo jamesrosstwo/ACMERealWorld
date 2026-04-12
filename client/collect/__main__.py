@@ -18,6 +18,7 @@ import hydra
 import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
+from scipy.spatial.transform import Rotation
 
 from client.nuc import NUCInterface
 from client.collect.realsense import RealSenseInterface
@@ -59,7 +60,7 @@ def main(cfg: DictConfig):
             with RealSenseInterface(ep_path, **cfg.realsense) as rs_interface:
                 episode_writer = ACMEWriter(ep_path, serials=rs_interface.serials, **cfg.writer)
 
-                nuc.reset()
+                nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
                 state = nuc.get_robot_state()
                 gello.zero_controls(state["qpos"])
                 nuc.start()
@@ -68,6 +69,15 @@ def main(cfg: DictConfig):
                 def on_receive_frame(serial, timestamp):
                     if serial == primary_serial:
                         state = nuc.get_robot_state()
+
+                        # Log tracking error (actual vs previously commanded pose)
+                        desired_pose = nuc.get_desired_ee_pose()
+                        desired_pos, desired_rot = desired_pose[:3], desired_pose[3:]
+                        pos_err = np.linalg.norm(state["ee_pos"] - desired_pos)
+                        rot_err = (Rotation.from_quat(state["ee_rot"])
+                                   * Rotation.from_quat(desired_rot).inv()).magnitude()
+                        # print(f"\t[tracking] pos_err={pos_err*1000:.1f}mm  rot_err={np.degrees(rot_err):.1f}deg")
+
                         # for episode collection we just assume all cameras are synchronized to the
                         # primary camera, and that this synchronous operation of getting robot state
                         # from the NUC takes no time.

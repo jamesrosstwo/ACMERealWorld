@@ -8,17 +8,21 @@ home_rot: [1., 0., 0., 0.]
 # Frozen dims are zeroed in observations and replaced with home values in commands.
 pos_mask: [true, true, false]   # xy free, z locked to table height
 
-max_episode_timesteps: 250
+max_episode_timesteps: 550
 gripper_hysteresis: 0.1
 
 freeze_rotation: true
 freeze_gripper: true
 
+zero_gripper_obs: true  # Zero out gripper obs (matches old collection data)
+open_gripper_on_reset: false
+controller: cartesian
+
 impedance:
   # Polymetis franka_hardware.yaml defaults (exact match).
-  translational_stiffness: [750, 750, 750]  # N/m
-  rotational_stiffness: [60, 60, 60]        # Nm/rad (increased for freeze_rotation)
-  translational_damping: [50, 50, 50]       # N·s/m
-  rotational_damping: [15, 15, 15]          # Nm·s/rad (increased for freeze_rotation)
-  nullspace_stiffness: [40, 30, 50, 25, 35, 25, 10]  # Nm/rad (Kq)
+  translational_stiffness: [200, 200, 200]       # N/m
+  rotational_stiffness: [180, 180, 180]          # Nm/rad
+  translational_damping: [80, 80, 80]            # N·s/m
+  rotational_damping: [7, 7, 7]                  # Nm·s/rad
+  nullspace_stiffness: [40, 30, 50, 25, 35, 30, 30]  # Nm/rad (Kq)
   nullspace_damping: [4, 6, 5, 5, 3, 2, 1]            # Nm·s/rad (Kqd)

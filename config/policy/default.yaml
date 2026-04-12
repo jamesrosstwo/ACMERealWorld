@@ -1,13 +1,14 @@
-policy:
-  control_frequency: 1
-  obs_history: 2
-  action_horizon: 14
-  action_start_offset: 2
-  rgb_keys: ["rgb_0", "rgb_1"]
-  lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
-  delta_actions: false
-  port: 52835
-  frame_shape:
-    - 3
-    - 256
-    - 256
+control_frequency: 1
+obs_history: 2
+action_horizon: 14
+action_start_offset: 2
+rgb_keys: ["rgb_0", "rgb_1"]
+lowdim_keys: ["eef_pos", "eef_quat", "gripper_force"]
+delta_actions: false
+host: localhost
+port: 52657
+prompt: ""
+frame_shape:
+  - 3
+  - 256
+  - 256

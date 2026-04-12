@@ -1,6 +1,8 @@
 # @package _group_
 # Default task configuration. Task-specific configs override these values.
 
+instruction: ""
+
 home_pos: [0.30582778, 0., 0.48167681]
 home_rot: [1., 0., 0., 0.]
 
@@ -8,8 +10,13 @@ pos_mask: [true, true, true]
 
 freeze_rotation: false
 freeze_gripper: false
+open_gripper_on_reset: true
+zero_gripper_obs: false
 
 gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
+
+# Controller type: "cartesian" (CartesianImpedance) or "hybrid_joint" (HybridJointImpedance)
+controller: hybrid_joint
 
 impedance:
   # Polymetis franka_hardware.yaml defaults (exact match).

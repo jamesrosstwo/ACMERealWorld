@@ -37,7 +37,7 @@ class GripperInterface:
 
     def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = False):
         try:
-            return self._gripper.grasp(width=grasp_width, speed=speed, force=force, epsilon_outer=0.1)
+            return self._gripper.grasp(width=grasp_width, speed=speed, force=force, epsilon_outer=0.04)
         except RuntimeError:
             return False
 
@@ -48,10 +48,12 @@ class GripperInterface:
         pass
 
     def _do_grasp(self):
-        self.grasp(speed=0.1, force=10.0, blocking=False)
+        result = self.grasp(speed=0.1, force=10.0, blocking=False)
+        print(f"\t[gripper] grasp result: {result}")
 
     def _do_open(self):
         mx = self.get_state().max_width
+        print(f"\t[gripper] opening to max_width={mx}")
         self.goto(width=mx, speed=0.1, blocking=False)
 
     def act_async(self, gripper_val: float):
@@ -64,13 +66,17 @@ class GripperInterface:
             return
 
         if val > grasp_threshold and not self._target_grasp_state:
+            print(f"\t[gripper] val={val:.3f} > {grasp_threshold} — GRASPING")
             self._target_grasp_state = True
             self._thread = threading.Thread(target=self._do_grasp)
             self._thread.start()
         elif val < open_threshold and self._target_grasp_state:
+            print(f"\t[gripper] val={val:.3f} < {open_threshold} — OPENING")
             self._target_grasp_state = False
             self._thread = threading.Thread(target=self._do_open)
             self._thread.start()
+        else:
+            pass
 
 
 class GripperState:
@@ -96,6 +102,7 @@ class NUCInterface:
         print(f"Connecting to Panda at {self._franka_ip}")
         self._panda = panda_py.Panda(self._franka_ip)
         self._controller = None
+        self._is_joint_space = False
 
         hysteresis = server.gripper_hysteresis
         self._gripper = GripperInterface(self._franka_ip, hysteresis=hysteresis)
@@ -110,7 +117,9 @@ class NUCInterface:
         R = self._panda.get_pose()[:3, :3]
         t = self._panda.get_position()
         ee_rot = Rotation.from_matrix(R).as_quat()  # xyzw
-        return dict(qpos=self._panda.q, ee_pos=t, ee_rot=ee_rot, gripper_force=np.zeros(1))
+        gripper_state = self._gripper.get_state()
+        gripper_force = np.array([1.0 - gripper_state.width / gripper_state.max_width])
+        return dict(qpos=self._panda.q, ee_pos=t, ee_rot=ee_rot, gripper_force=gripper_force)
 
     def forward_kinematics(self, joint_positions: torch.Tensor):
         q = joint_positions.cpu().numpy().reshape(7, 1)
@@ -128,7 +137,11 @@ class NUCInterface:
         self._desired_eef_pos = eef_pos.copy()
         self._desired_eef_rot = eef_rot.copy()
         if self._controller:
-            self._controller.set_control(eef_pos, eef_rot)
+            if self._is_joint_space:
+                q_desired = panda_py.ik(eef_pos, eef_rot, q_init=self._panda.q)
+                self._controller.set_control(q_desired)
+            else:
+                self._controller.set_control(eef_pos, eef_rot)
 
         if gripper is not None:
             g_val = gripper.item() if hasattr(gripper, 'item') else float(gripper)
@@ -142,8 +155,7 @@ class NUCInterface:
         """Calibrate the gripper via homing in a background thread."""
         threading.Thread(target=self._gripper._gripper.homing, daemon=True).start()
 
-    def _make_controller(self):
-        from panda_py import controllers
+    def _parse_impedance(self):
         imp_cfg = self._server_cfg.impedance
         trans = list(imp_cfg.translational_stiffness)
         rot = list(imp_cfg.rotational_stiffness)
@@ -153,17 +165,36 @@ class NUCInterface:
         damping = np.diag(trans_d + rot_d).astype(np.float64)
         ns_stiffness = np.array(imp_cfg.nullspace_stiffness, dtype=np.float64)
         ns_damping = np.array(imp_cfg.nullspace_damping, dtype=np.float64)
-        return controllers.PolymetisImpedance(
-            impedance=impedance,
-            damping=damping,
-            nullspace_stiffness=ns_stiffness,
-            nullspace_damping=ns_damping,
-        )
+        return impedance, damping, ns_stiffness, ns_damping
 
-    def reset(self):
+    def _make_controller(self):
+        from panda_py import controllers
+        ctrl_type = self._server_cfg.get("controller", "cartesian")
+        impedance, damping, ns_stiffness, ns_damping = self._parse_impedance()
+        if ctrl_type == "hybrid_joint":
+            self._is_joint_space = True
+            return controllers.HybridJointImpedance(
+                Kx=impedance,
+                Kxd=damping,
+                Kq=ns_stiffness,
+                Kqd=ns_damping,
+            )
+        else:
+            self._is_joint_space = False
+            return controllers.PolymetisImpedance(
+                impedance=impedance,
+                damping=damping,
+                nullspace_stiffness=ns_stiffness,
+                nullspace_damping=ns_damping,
+            )
+
+    def reset(self, open_gripper: bool = True):
         home_pos, home_rot = self.home
         self._panda.move_to_start()
         self._panda.move_to_pose([home_pos], [home_rot])
+        if open_gripper:
+            self._gripper._do_open()
+            self._gripper._target_grasp_state = False
 
     def start(self):
         self._controller = self._make_controller()

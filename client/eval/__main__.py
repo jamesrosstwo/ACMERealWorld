@@ -59,10 +59,12 @@ def start_control_loop(
         eef_pos = np.stack([s["ee_pos"] for s in all_states[-policy.obs_history_size:]])
         eef_rot = np.stack([s["ee_rot"] for s in all_states[-policy.obs_history_size:]])
 
-        cur_eef_pos = nuc.get_robot_state()["ee_pos"]
-        print(f"\tInput positional error: {(cur_eef_pos - eef_pos[-1]) * 100}cm")
+        if task_cfg.zero_gripper_obs:
+            gripper_force = np.zeros((policy.obs_history_size, 1))
+        else:
+            gripper_force = np.stack([s["gripper_force"] for s in all_states[-policy.obs_history_size:]]).reshape(-1, 1)
 
-        gripper_force = np.zeros((policy.obs_history_size, 1))
+
         # Zero out frozen position dims in the observation
         eef_pos[:, ~pos_mask] = 0
 
@@ -74,7 +76,8 @@ def start_control_loop(
             gripper_force=np.expand_dims(gripper_force, 0)
         )
 
-        print(desired_gripper_force)
+
+
 
         horizon_len = desired_eef_pos.shape[0]
         home_eef_pos, home_eef_rot = nuc.home
@@ -94,7 +97,7 @@ def start_control_loop(
             gripper_force=gripper_force,
             desired_ee_pos=desired_eef_pos.numpy(),
             desired_ee_quat=desired_eef_quat.numpy(),
-            desired_gripper_force=np.zeros((desired_eef_pos.shape[0], 1))
+            desired_gripper_force=desired_gripper_force.numpy().reshape(-1, 1)
         )
         per_step_sleep = 1.0 / (policy.control_frequency * horizon_len)
         for i in range(horizon_len):
@@ -121,7 +124,7 @@ def start_control_loop(
 def record_episode(cfg, ep_path, nuc, policy):
     with EvalRealsense(**cfg.realsense) as rsi:
         writer = EvalWriter(path=ep_path, **cfg.writer)
-        nuc.reset()
+        nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
 
         primary_serial = rsi.serials[0]
         def on_receive_frame(serial):
