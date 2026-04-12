@@ -188,15 +188,30 @@ class NUCInterface:
                 nullspace_damping=ns_damping,
             )
 
-    def reset(self, open_gripper: bool = True):
+    def reset(self, open_gripper: bool = True, pos_tol: float = 0.005, rot_tol: float = 0.05,
+              timeout: float = 10.0):
         home_pos, home_rot = self.home
-        self._panda.move_to_start()
-        self._panda.move_to_pose([home_pos], [home_rot])
+        self.start()
+        self.send_control(home_pos, home_rot, gripper=None)
+
+        # Wait until the robot converges to the home pose.
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            state = self.get_robot_state()
+            pos_err = np.linalg.norm(state["ee_pos"] - home_pos)
+            rot_err = (Rotation.from_quat(state["ee_rot"])
+                       * Rotation.from_quat(home_rot).inv()).magnitude()
+            if pos_err < pos_tol and rot_err < rot_tol:
+                break
+            time.sleep(0.05)
+
         if open_gripper:
             self._gripper._do_open()
             self._gripper._target_grasp_state = False
 
     def start(self):
+        if self._controller:
+            self._panda.stop_controller()
         self._controller = self._make_controller()
         self._panda.start_controller(self._controller)
 

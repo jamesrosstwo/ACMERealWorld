@@ -63,7 +63,6 @@ def main(cfg: DictConfig):
                 nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
                 state = nuc.get_robot_state()
                 gello.zero_controls(state["qpos"])
-                nuc.start()
                 
                 primary_serial = rs_interface.serials[0]
                 def on_receive_frame(serial, timestamp):
