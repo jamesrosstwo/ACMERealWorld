@@ -1,7 +1,7 @@
 # @package _group_
 instruction: "Push the green T shape into the black outline of the T shape on the table"
 
-home_pos: [0.425, -0.375, 0.235]
+home_pos: [0.55, 0.35, 0.265]
 home_rot: [1., 0., 0., 0.]
 
 # Per-axis position mask: true = free (policy controls), false = frozen to home.
@@ -10,6 +10,7 @@ pos_mask: [true, true, false]   # xy free, z locked to table height
 
 max_episode_timesteps: 550
 gripper_hysteresis: 0.1
+
 
 freeze_rotation: true
 freeze_gripper: true
@@ -20,9 +21,9 @@ controller: cartesian
 
 impedance:
   # Polymetis franka_hardware.yaml defaults (exact match).
-  translational_stiffness: [200, 200, 650]       # N/m
-  rotational_stiffness: [180, 180, 180]          # Nm/rad
-  translational_damping: [80, 80, 80]            # N·s/m
-  rotational_damping: [7, 7, 7]                  # Nm·s/rad
-  nullspace_stiffness: [40, 30, 50, 25, 35, 30, 30]  # Nm/rad (Kq)
-  nullspace_damping: [4, 6, 5, 5, 3, 2, 1]            # Nm·s/rad (Kqd)
+  translational_stiffness: [600, 300, 1000]       # N/m
+  rotational_stiffness: [250, 250, 250]          # Nm/rad
+  translational_damping: [60, 60, 80]            # N·s/m
+  rotational_damping: [7, 7, 7]                  # Nm·s/rad\
+  nullspace_stiffness: [15, 15, 15, 15, 15, 15, 15]  # Nm/rad
+  nullspace_damping: [7.75, 7.75, 7.75, 7.75, 7.75, 7.75, 7.75]  # Nm·s/rad (2*sqrt(15) ≈ 7.75)

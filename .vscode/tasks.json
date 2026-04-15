@@ -4,14 +4,14 @@
     {
       "label": "Collect",
       "type": "shell",
-      "command": "conda run -n ACMERealWorldFS --live-stream python -u -m client.collect task=${fileBasenameNoExtension}",
+      "command": "conda run -n ACMERealWorldFS --live-stream env LD_LIBRARY_PATH=/home/rvl_root/anaconda3/envs/ACMERealWorld/lib python -u -m client.collect task=${fileBasenameNoExtension}",
       "group": "build",
       "problemMatcher": []
     },
     {
       "label": "Eval",
       "type": "shell",
-      "command": "conda run -n ACMERealWorldFS --live-stream python -u -m client.eval task=${fileBasenameNoExtension}",
+      "command": "conda run -n ACMERealWorldFS --live-stream env LD_LIBRARY_PATH=/home/rvl_root/anaconda3/envs/ACMERealWorld/lib python -u -m client.eval task=${fileBasenameNoExtension}",
       "group": "test",
       "problemMatcher": []
     },
@@ -21,6 +21,21 @@
       "command": "conda run -n ACMERealWorld --live-stream env PYTHONPATH=\"${workspaceFolder}:${workspaceFolder}/submodules/FoundationStereo\" python -u client/postprocess.py",
       "group": "build",
       "problemMatcher": []
+    },
+    {
+      "label": "Sync Episodes to Borabora",
+      "type": "shell",
+      "command": "rsync -av --partial --progress -e 'ssh -p 2233 -i ~/.ssh/id_ed25519 -J james@142.1.44.183:2233' /mnt/ssd/james/episodes/ james@142.1.46.125:/home/james/ACME/data/${input:remotePath}",
+      "group": "build",
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "remotePath",
+      "type": "promptString",
+      "description": "Remote subdirectory under /home/james/ACME/data/ on borabora",
+      "default": ""
     }
   ]
 }

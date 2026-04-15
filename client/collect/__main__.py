@@ -12,6 +12,8 @@ Usage::
 import shutil
 import traceback
 import time
+import threading
+import queue
 from pathlib import Path
 
 import hydra
@@ -65,29 +67,58 @@ def main(cfg: DictConfig):
                 gello.zero_controls(state["qpos"])
                 
                 primary_serial = rs_interface.serials[0]
+
+                # Queue decouples frame grabbing from heavy robot state / control
+                # work so the primary camera thread never blocks on network or I/O.
+                state_queue = queue.Queue()
+                state_worker_stop = threading.Event()
+
+                def state_worker():
+                    steps = 0
+                    while not state_worker_stop.is_set():
+                        try:
+                            timestamp = state_queue.get(timeout=1.0)
+                        except queue.Empty:
+                            continue
+                        if steps >= cfg.max_episode_timesteps:
+                            continue
+                        try:
+                            state = nuc.get_robot_state()
+
+                            # Log tracking error (actual vs previously commanded pose)
+                            desired_pose = nuc.get_desired_ee_pose()
+                            desired_pos, desired_rot = desired_pose[:3], desired_pose[3:]
+                            pos_err = np.linalg.norm(state["ee_pos"] - desired_pos)
+                            rot_err = (Rotation.from_quat(state["ee_rot"])
+                                       * Rotation.from_quat(desired_rot).inv()).magnitude()
+                            # print(f"\t[tracking] pos_err={pos_err*1000:.1f}mm  rot_err={np.degrees(rot_err):.1f}deg")
+                            # print(f"\t[ee_pos] x={state['ee_pos'][0]:.4f}  y={state['ee_pos'][1]:.4f}  z={state['ee_pos'][2]:.4f}")
+
+                            current_action = action_step(gello, nuc, cfg.task)
+                            episode_writer.write_state(timestamp=timestamp, action=current_action, **state)
+                            steps += 1
+                        except Exception as e:
+                            print(f"State worker error: {e}")
+                            traceback.print_exc()
+
+                state_thread = threading.Thread(target=state_worker, daemon=True)
+                state_thread.start()
+
                 def on_receive_frame(serial, timestamp):
                     if serial == primary_serial:
-                        state = nuc.get_robot_state()
+                        state_queue.put(timestamp)
 
-                        # Log tracking error (actual vs previously commanded pose)
-                        desired_pose = nuc.get_desired_ee_pose()
-                        desired_pos, desired_rot = desired_pose[:3], desired_pose[3:]
-                        pos_err = np.linalg.norm(state["ee_pos"] - desired_pos)
-                        rot_err = (Rotation.from_quat(state["ee_rot"])
-                                   * Rotation.from_quat(desired_rot).inv()).magnitude()
-                        # print(f"\t[tracking] pos_err={pos_err*1000:.1f}mm  rot_err={np.degrees(rot_err):.1f}deg")
-
-                        # for episode collection we just assume all cameras are synchronized to the
-                        # primary camera, and that this synchronous operation of getting robot state
-                        # from the NUC takes no time.
-                        current_action = action_step(gello, nuc, cfg.task)
-                        episode_writer.write_state(timestamp=timestamp, action=current_action, **state)
-
-                rs_interface.start_capture(on_receive_frame)#, on_warmup=nuc.home_gripper)
                 rs_interface.reset_frame_counts()
+                rs_interface.start_capture(on_receive_frame)#, on_warmup=nuc.home_gripper)
                 while any([c < cfg.max_episode_timesteps for c in rs_interface.get_frame_counts().values()]):
                     time.sleep(2.0)
-                    print("Episode progress:", np.array(list(rs_interface.get_frame_counts().values())) / cfg.max_episode_timesteps)
+                    qsize = state_queue.qsize()
+                    print("Episode progress:", np.array(list(rs_interface.get_frame_counts().values())) / cfg.max_episode_timesteps,
+                          f"  state_queue: {qsize}")
+
+                # Wait for state worker to drain remaining items
+                state_worker_stop.set()
+                state_thread.join()
             episode_writer.flush()
         except Exception as e:
             print(e)
