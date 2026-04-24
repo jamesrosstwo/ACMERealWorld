@@ -78,3 +78,4 @@ class GELLOInterface:
 
     def zero_controls(self, qpos):
         self._joint_adjustment = qpos - self._get_joints()
+        print(f"[gello] zero_controls: joint_adjustment={np.array2string(self._joint_adjustment, precision=4)}")

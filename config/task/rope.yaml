@@ -1,0 +1,26 @@
+# @package _group_
+instruction: "Move the rope into the red outline"
+
+home_pos: [0.45, 0., 0.08]
+home_rot: [1., 0., 0., 0.]
+
+pos_mask: [true, true, false]
+
+freeze_rotation: false
+freeze_gripper: false
+zero_gripper_obs: true  # Zero out gripper obs (matches old collection data)
+open_gripper_on_reset: true
+gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
+
+controller: cartesian
+
+max_episode_timesteps: 700
+
+impedance:
+  # Original panda_py CartesianImpedance defaults, converted to explicit gains.
+  translational_stiffness: [400, 400, 800]       # N/m
+  rotational_stiffness: [60, 60, 60]             # Nm/rad
+  translational_damping: [40, 40, 40]            # N·s/m    (2*sqrt(400) = 40)
+  rotational_damping: [8, 8, 8]      #'' Nm·s/rad (2*sqrt(60) ≈ 15.49)
+  nullspace_stiffness: [15, 15, 15, 15, 15, 15, 15]  # Nm/rad
+  nullspace_damping: [7.75, 7.75, 7.75, 7.75, 7.75, 7.75, 7.75]  # Nm·s/rad (2*sqrt(15) ≈ 7.75)

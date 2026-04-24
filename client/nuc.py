@@ -103,6 +103,8 @@ class NUCInterface:
         self._panda = panda_py.Panda(self._franka_ip)
         self._controller = None
         self._is_joint_space = False
+        self._prev_q = None
+        self._prev_t = None
 
         hysteresis = server.gripper_hysteresis
         self._gripper = GripperInterface(self._franka_ip, hysteresis=hysteresis)
@@ -120,6 +122,73 @@ class NUCInterface:
         gripper_state = self._gripper.get_state()
         gripper_force = np.array([1.0 - gripper_state.width / gripper_state.max_width])
         return dict(qpos=self._panda.q, ee_pos=t, ee_rot=ee_rot, gripper_force=gripper_force)
+
+    def get_controller_diagnostics(self):
+        """Compute low-level controller diagnostics.
+
+        Returns a dict with:
+          - cart_pos_error (6,): Cartesian pose error (3 translation + 3 rotation)
+          - cart_vel_error (6,): Cartesian velocity (finite-difference estimate)
+          - tau_stiffness (7,): Joint torques from Cartesian stiffness (J^T K x_err)
+          - tau_damping (7,): Joint torques from Cartesian damping (-J^T D dx)
+          - tau_nullspace (7,): Joint torques from nullspace stiffness + damping
+        """
+        impedance, damping, ns_stiffness, ns_damping = self._parse_impedance()
+
+        q = self._panda.q.copy()
+        pose = self._panda.get_pose()  # 4x4 homogeneous
+        actual_pos = pose[:3, 3]
+        actual_rot = Rotation.from_matrix(pose[:3, :3])
+
+        desired_pos = self._desired_eef_pos
+        desired_rot = Rotation.from_quat(self._desired_eef_rot)
+
+        # Cartesian position error
+        pos_err = desired_pos - actual_pos
+        # Orientation error as rotation vector (angle-axis)
+        rot_err = (desired_rot * actual_rot.inv()).as_rotvec()
+        cart_pos_error = np.concatenate([pos_err, rot_err])
+
+        # Estimate Cartesian velocity via finite-difference on joint positions
+        now = time.time()
+        if self._prev_q is not None and self._prev_t is not None:
+            dt = now - self._prev_t
+            if dt > 0:
+                dq = (q - self._prev_q) / dt
+            else:
+                dq = np.zeros(7)
+        else:
+            dq = np.zeros(7)
+        self._prev_q = q.copy()
+        self._prev_t = now
+
+        # Get Jacobian at current configuration
+        try:
+            J = np.array(self._panda.get_jacobian()).reshape(6, 7)
+        except (AttributeError, RuntimeError):
+            # Fallback: zero Jacobian means we can't decompose torques
+            J = np.zeros((6, 7))
+
+        cart_vel = J @ dq  # 6D Cartesian velocity
+        cart_vel_error = cart_vel  # velocity error (desired vel is zero for impedance)
+
+        # Torque contributions
+        # Stiffness: J^T K x_err
+        tau_stiffness = J.T @ (impedance @ cart_pos_error)
+        # Damping: -J^T D dx  (opposes motion)
+        tau_damping = -J.T @ (damping @ cart_vel)
+        # Nullspace (approximate): project into nullspace of J
+        # For logging, just show raw joint-space stiffness/damping terms
+        q_home = panda_py.ik(self._home_pos, self._home_rot, q_init=q)
+        tau_nullspace = ns_stiffness * (q_home - q) - ns_damping * dq
+
+        return dict(
+            cart_pos_error=cart_pos_error.astype(np.float32),
+            cart_vel_error=cart_vel_error.astype(np.float32),
+            tau_stiffness=tau_stiffness.astype(np.float32),
+            tau_damping=tau_damping.astype(np.float32),
+            tau_nullspace=tau_nullspace.astype(np.float32),
+        )
 
     def forward_kinematics(self, joint_positions: torch.Tensor):
         q = joint_positions.cpu().numpy().reshape(7, 1)
@@ -188,22 +257,16 @@ class NUCInterface:
                 nullspace_damping=ns_damping,
             )
 
-    def reset(self, open_gripper: bool = True, pos_tol: float = 0.005, rot_tol: float = 0.05,
-              timeout: float = 10.0):
+    def reset(self, open_gripper: bool = True):
         home_pos, home_rot = self.home
+        reset_pos = home_pos + np.array([0.0, 0.0, 0.04])
+        # Drive to home with libfranka's motion generator before handing off to the impedance controller.
+        if self._controller:
+            self._panda.stop_controller()
+            self._controller = None
+        self._panda.move_to_pose([reset_pos], [home_rot])
         self.start()
         self.send_control(home_pos, home_rot, gripper=None)
-
-        # Wait until the robot converges to the home pose.
-        t0 = time.time()
-        while time.time() - t0 < timeout:
-            state = self.get_robot_state()
-            pos_err = np.linalg.norm(state["ee_pos"] - home_pos)
-            rot_err = (Rotation.from_quat(state["ee_rot"])
-                       * Rotation.from_quat(home_rot).inv()).magnitude()
-            if pos_err < pos_tol and rot_err < rot_tol:
-                break
-            time.sleep(0.05)
 
         if open_gripper:
             self._gripper._do_open()

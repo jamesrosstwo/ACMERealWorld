@@ -73,6 +73,8 @@ def main(cfg: DictConfig):
                 state_queue = queue.Queue()
                 state_worker_stop = threading.Event()
 
+                ctrl_logging = cfg.task.get("controller_logging", False)
+
                 def state_worker():
                     steps = 0
                     while not state_worker_stop.is_set():
@@ -91,8 +93,15 @@ def main(cfg: DictConfig):
                             pos_err = np.linalg.norm(state["ee_pos"] - desired_pos)
                             rot_err = (Rotation.from_quat(state["ee_rot"])
                                        * Rotation.from_quat(desired_rot).inv()).magnitude()
-                            # print(f"\t[tracking] pos_err={pos_err*1000:.1f}mm  rot_err={np.degrees(rot_err):.1f}deg")
-                            # print(f"\t[ee_pos] x={state['ee_pos'][0]:.4f}  y={state['ee_pos'][1]:.4f}  z={state['ee_pos'][2]:.4f}")
+
+                            if ctrl_logging:
+                                diag = nuc.get_controller_diagnostics()
+                                state.update(diag)
+                                print(f"\t[ctrl] pos_err={np.linalg.norm(diag['cart_pos_error'][:3])*1000:.1f}mm "
+                                      f"rot_err={np.linalg.norm(diag['cart_pos_error'][3:])*180/np.pi:.1f}deg | "
+                                      f"tau: stiff={np.linalg.norm(diag['tau_stiffness']):.2f} "
+                                      f"damp={np.linalg.norm(diag['tau_damping']):.2f} "
+                                      f"null={np.linalg.norm(diag['tau_nullspace']):.2f}")
 
                             current_action = action_step(gello, nuc, cfg.task)
                             episode_writer.write_state(timestamp=timestamp, action=current_action, **state)
