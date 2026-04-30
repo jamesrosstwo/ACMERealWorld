@@ -27,6 +27,7 @@ from tqdm import tqdm
 
 from client.collect.realsense import RSBagProcessor
 from client.collect.write import ACMEWriter
+from client.utils import validate_episode
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,10 @@ def gather_data(
             if completion_marker.exists():
                 print(f"Skipping {ep_path}: already postprocessed")
             else:
+                ok, errors = validate_episode(ep_path)
+                if not ok:
+                    print(f"Skipping {ep_path}: failed validation: {'; '.join(errors)}")
+                    continue
                 print(f"Processing episode {ep_path}")
                 try:
                     shutil.rmtree(Path(ep_path / "captures"))

@@ -1,7 +1,7 @@
 # @package _group_
-instruction: "Move the rope into the red outline"
+instruction: "Pick up the object and place it at in the bucket"
 
-home_pos: [0.45, 0., 0.20]
+home_pos: [0.30582778, 0., 0.48467681]
 home_rot: [1., 0., 0., 0.]
 
 pos_mask: [true, true, true]
@@ -14,11 +14,11 @@ gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
 
 controller: cartesian
 
-max_episode_timesteps: 800
+max_episode_timesteps: 300
 
 impedance:
-  # Original panda_py CartesianImpedance defaults, converted to explicit gains.
-  translational_stiffness: [550, 550, 800]       # N/m
+  # Original panda_py CartesianImpedance defaults, converted to explici0t gains.
+  translational_stiffness: [550, 550, 550]       # N/m
   rotational_stiffness: [60, 60, 60]             # Nm/rad
   translational_damping: [40, 40, 40]            # N·s/m    (2*sqrt(400) = 40)
   rotational_damping: [8, 8, 8]      #'' Nm·s/rad (2*sqrt(60) ≈ 15.49)

@@ -1,9 +1,10 @@
 """Episode data writer.
 
 :class:`ACMEWriter` writes synchronized multi-camera RGB frames (MP4),
-IR stereo pairs (zarr), and robot state (zarr) for a single episode. During
-collection frames are buffered in memory; :meth:`ACMEWriter.flush` performs
-cross-camera temporal synchronization, encodes video, and writes metadata.
+IR stereo pairs (zarr), and robot state (zarr) for a single episode. Frames
+and state are buffered in memory during collection; :meth:`ACMEWriter.flush`
+performs cross-camera temporal synchronization, aligns state to the synced
+reference timestamps, encodes video, and writes metadata.
 """
 from pathlib import Path
 from typing import Dict, List
@@ -128,11 +129,13 @@ class ACMEWriter:
         self.path = path
         assert self.path.exists()
         self.instruction = instruction
-        self._store = zarr.DirectoryStore(str(self.path / "raw_episode.zarr"))
-        self._root = zarr.group(store=self._store)
         self._max_episode_len = max_episode_len
         self._captures: Dict[str, ACMEWriter._CaptureWriter] = self._init_captures(serials, captures)
-        self._state_write_counter = 0
+        # State is buffered in memory and written to Zarr in flush(). The previous
+        # per-step DirectoryStore writes used a single chunk per array, so each
+        # call rewrote the whole chunk file from the logging hot path.
+        self._state_buffer: Dict[str, list] = {}
+        self._state_timestamps: list = []
 
     @property
     def episode_path(self):
@@ -154,37 +157,66 @@ class ACMEWriter:
 
     def write_state(self, timestamp=None, **state):
         if timestamp is not None:
-            if '_state_timestamps' not in self._root:
-                self._root.create_dataset(
-                    name='_state_timestamps',
-                    shape=(self._max_episode_len,),
-                    chunks=(self._max_episode_len,),
-                )
-            self._root['_state_timestamps'][self._state_write_counter] = timestamp
+            self._state_timestamps.append(timestamp)
         for k, v in state.items():
-            if k not in self._root:
-                if isinstance(v, (float, int)):
-                    self._root.create_dataset(
-                        name=k,
-                        shape=(self._max_episode_len,),
-                        chunks=(self._max_episode_len,),
-                    )
-                else:
-                    self._root.create_dataset(
-                        name=k,
-                        shape=(self._max_episode_len, *v.shape),
-                        chunks=(self._max_episode_len, *v.shape),
-                        dtype=v.dtype,
-                    )
-            self._root[k][self._state_write_counter] = v
-        self._state_write_counter += 1
+            if k not in self._state_buffer:
+                self._state_buffer[k] = []
+            if isinstance(v, (int, float)):
+                self._state_buffer[k].append(v)
+            elif isinstance(v, np.ndarray):
+                # Copy to avoid aliasing libfranka / panda-py internal buffers
+                # that may be shared across calls.
+                self._state_buffer[k].append(v.copy())
+            else:
+                try:
+                    self._state_buffer[k].append(np.asarray(v))
+                except ValueError as e:
+                    print(f"write_state: cannot convert key={k!r} type={type(v).__name__} repr={v!r}: {e}")
+                    raise
+
+    def _persist_raw_state(self):
+        """Write the in-memory state buffer to ``raw_episode.zarr`` in one batch.
+
+        Done at flush time (not per call) so the previous single-chunk
+        rewrite-on-every-write hot-path cost is avoided.
+        """
+        if not self._state_buffer and not self._state_timestamps:
+            return
+        raw_store = zarr.DirectoryStore(str(self.path / "raw_episode.zarr"))
+        raw_root = zarr.group(store=raw_store, overwrite=True)
+        if self._state_timestamps:
+            raw_root.create_dataset(
+                "_state_timestamps",
+                data=np.asarray(self._state_timestamps),
+            )
+        for k, values in self._state_buffer.items():
+            data = np.stack([np.asarray(v) for v in values])
+            raw_root.create_dataset(k, data=data)
+
+    def _load_raw_state(self):
+        """Return ``(state_ts, state_data)`` from ``raw_episode.zarr``, or ``(None, None)``."""
+        raw_path = self.path / "raw_episode.zarr"
+        if not raw_path.is_dir():
+            return None, None
+        raw_root = zarr.open_group(str(raw_path), mode="r")
+        if "_state_timestamps" not in raw_root:
+            return None, None
+        state_ts = np.asarray(raw_root["_state_timestamps"])
+        state_data = {k: np.asarray(raw_root[k]) for k in raw_root if k != "_state_timestamps"}
+        return state_ts, state_data
 
     def flush(self):
-        # We write state on the fly, only captures require flushing at the end of the collection
+        # Persist raw state to disk before any early returns so live collection
+        # (where captures are filled by the bag pipeline, not this writer) still
+        # leaves recoverable state on disk for postprocessing.
+        self._persist_raw_state()
+
         captures = list(self._captures.values())
         empty_captures = [s for s, c in self._captures.items() if c.highest_written_index == 0]
         if empty_captures:
-            print(f"Warning: captures {empty_captures} have no frames, skipping flush")
+            print(f"Note: captures {empty_captures} have no in-memory frames, "
+                  f"skipping capture sync (raw_episode.zarr written: "
+                  f"{(self.path / 'raw_episode.zarr').is_dir()})")
             return
 
         all_rgb_ts = [c.col_tmstmps[:c.highest_written_index] for c in captures]
@@ -233,30 +265,22 @@ class ACMEWriter:
             with open(str(cap._path / "timestamps.npy"), "wb") as f:
                 np.savez(f, np.asarray(synced_timestamps))
 
-        raw_state = zarr.open_group(str(self.path / "raw_episode.zarr"), mode="r")
         synced_store = zarr.DirectoryStore(str(self.path / "episode.zarr"))
         synced_root = zarr.group(store=synced_store)
-        # Align state entries to the synced reference timestamps.
-        if '_state_timestamps' in raw_state:
-            # Use recorded state timestamps for proper nearest-neighbor alignment.
-            # The array is zero-initialized; valid timestamps are always > 0,
-            # so the first zero marks the end of valid entries.
-            state_ts_arr = np.array(raw_state['_state_timestamps'])
-            nonzero = state_ts_arr != 0
-            n_state = len(state_ts_arr) if nonzero.all() else int(np.argmin(nonzero))
-            state_ts = state_ts_arr[:n_state]
-            sync_indices = nearest_neighbor_indices(ref_ts, state_ts)
-            for key in raw_state:
-                if key == '_state_timestamps':
-                    continue
-                data = np.array(raw_state[key])[:n_state]
-                synced_root.create_dataset(key, data=data[sync_indices])
+        # Prefer the in-memory buffer (live-collection path); fall back to
+        # raw_episode.zarr on disk (postprocess path, where this writer is
+        # freshly constructed and the buffer is empty).
+        if self._state_timestamps:
+            state_ts = np.asarray(self._state_timestamps)
+            state_data = {k: np.stack([np.asarray(v) for v in vs])
+                          for k, vs in self._state_buffer.items()}
         else:
-            # Legacy fallback: no state timestamps, assume 1:1 with primary camera
-            n_state = captures[0].highest_written_index
-            for key in raw_state:
-                data = np.array(raw_state[key])[:n_state]
-                synced_root.create_dataset(key, data=data[ref_mask])
+            state_ts, state_data = self._load_raw_state()
+
+        if state_ts is not None and len(state_ts) > 0:
+            sync_indices = nearest_neighbor_indices(ref_ts, state_ts)
+            for key, data in state_data.items():
+                synced_root.create_dataset(key, data=data[sync_indices])
 
         metadata = dict(
             n_timesteps=sync_len,

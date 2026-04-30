@@ -65,8 +65,8 @@ def start_control_loop(
             gripper_force = np.stack([s["gripper_force"] for s in all_states[-policy.obs_history_size:]]).reshape(-1, 1)
 
 
-        # Zero out frozen position dims in the observation
-        eef_pos[:, ~pos_mask] = 0
+        # Slice observation to active position dims (frozen dims excluded)
+        eef_pos = eef_pos[:, pos_mask]
 
         desired_eef_pos, desired_eef_quat, desired_gripper_force = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
@@ -182,7 +182,7 @@ def main(cfg: DictConfig):
 
     while not should_exit:
         try:
-            ep_path = out_path / f"episode_{ep_idx}"
+            ep_path = out_path / f"episode_{ep_idx:03d}"
             ep_path.mkdir()
             record_episode(cfg, ep_path, nuc, policy)
             ep_idx += 1

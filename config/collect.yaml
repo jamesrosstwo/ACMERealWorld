@@ -4,6 +4,10 @@ defaults:
 max_episode_timesteps: ${task.max_episode_timesteps}
 episodes_path: "/mnt/ssd/james/episodes"
 
+# Rate of the dedicated teleop control thread (Hz). Decoupled from camera FPS
+# so input -> command latency is bounded by 1/teleop_rate, not the frame rate.
+teleop_rate: 50
+
 nuc:
   ip: "192.168.1.106"
   franka_ip: "192.168.1.107"
@@ -32,7 +36,7 @@ writer:
 
 gello:
   base_index: 0
-  baud_rate: 115200
+  baud_rate: 1000000
   port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTA2U2FX-if00-port0"
   joint_signs:
     - 1

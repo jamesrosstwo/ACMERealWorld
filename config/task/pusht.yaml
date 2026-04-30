@@ -8,7 +8,8 @@ home_rot: [1., 0., 0., 0.]
 # Frozen dims are zeroed in observations and replaced with home values in commands.
 pos_mask: [true, true, false]   # xy free, z locked to table height
 
-max_episode_timesteps: 550
+max_episode_timesteps: 430
+
 gripper_hysteresis: 0.1
 
 

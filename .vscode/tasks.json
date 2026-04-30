@@ -25,7 +25,7 @@
     {
       "label": "Sync Episodes to Borabora",
       "type": "shell",
-      "command": "LOG=/home/james/sync_${input:remotePath}_$(date +%Y%m%d_%H%M%S).log && nohup rsync -av --partial --progress -e 'ssh -p 2233 -i ~/.ssh/id_ed25519 -J james@142.1.44.183:2233' /mnt/ssd/james/episodes/* james@142.1.46.125:/home/james/ACME/data/${input:remotePath} > $LOG 2>&1 < /dev/null & disown; echo \"rsync PID: $!\"; echo \"tail -f $LOG\"",
+      "command": "LOG=/home/james/sync_${input:remotePath}_$(date +%Y%m%d_%H%M%S).log; EXCLUDES=$(ssh -p 2233 -i ~/.ssh/id_ed25519 -J james@142.1.44.183:2233 james@142.1.46.125 'for d in /home/james/ACME/data/${input:remotePath}/*/; do [ -f \"$d/COMPLETE\" ] && printf -- \" --exclude=%s\" \"$(basename \"$d\")\"; done' 2>/dev/null); setsid -f rsync -av --partial --progress $EXCLUDES -e 'ssh -p 2233 -i ~/.ssh/id_ed25519 -J james@142.1.44.183:2233' /mnt/ssd/james/episodes/ james@142.1.46.125:/home/james/ACME/data/${input:remotePath} > $LOG 2>&1 < /dev/null; echo \"tail -f $LOG\"",
       "group": "build",
       "problemMatcher": []
     }

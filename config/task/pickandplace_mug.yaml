@@ -14,7 +14,7 @@ gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
 
 controller: cartesian
 
-max_episode_timesteps: 500
+max_episode_timesteps: 300
 
 impedance:
   # Original panda_py CartesianImpedance defaults, converted to explicit gains.

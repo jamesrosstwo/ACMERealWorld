@@ -20,12 +20,11 @@ import hydra
 import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
-from scipy.spatial.transform import Rotation
 
 from client.nuc import NUCInterface
 from client.collect.realsense import RealSenseInterface
 from client.collect.gello import GELLOInterface
-from client.utils import get_latest_ep_path
+from client.utils import get_latest_ep_path, validate_episode
 from client.collect.write import ACMEWriter
 
 
@@ -63,17 +62,43 @@ def main(cfg: DictConfig):
                 episode_writer = ACMEWriter(ep_path, serials=rs_interface.serials, **cfg.writer)
 
                 nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
-                state = nuc.get_robot_state()
-                gello.zero_controls(state["qpos"])
-                
+
                 primary_serial = rs_interface.serials[0]
 
-                # Queue decouples frame grabbing from heavy robot state / control
-                # work so the primary camera thread never blocks on network or I/O.
-                state_queue = queue.Queue()
-                state_worker_stop = threading.Event()
-
                 ctrl_logging = cfg.task.get("controller_logging", False)
+
+                # Fast teleop thread: drives GELLO -> Franka commands at cfg.teleop_rate,
+                # independent of camera FPS. The most recently issued action is published
+                # via latest_action[0] for the logging thread to sample. Thread is
+                # constructed here but only started after start_capture so the operator
+                # gets control at the same moment recording begins.
+                home_pos, home_rot = nuc.home
+                latest_action = [np.concatenate([home_pos, home_rot, np.zeros(1)])]
+                teleop_stop = threading.Event()
+                teleop_period = 1.0 / float(cfg.teleop_rate)
+
+                def teleop_loop():
+                    next_t = time.time()
+                    while not teleop_stop.is_set():
+                        try:
+                            latest_action[0] = action_step(gello, nuc, cfg.task)
+                        except Exception as e:
+                            print(f"Teleop error: {e}")
+                            traceback.print_exc()
+                        next_t += teleop_period
+                        sleep_for = next_t - time.time()
+                        if sleep_for > 0:
+                            time.sleep(sleep_for)
+                        else:
+                            next_t = time.time()
+
+                teleop_thread = threading.Thread(target=teleop_loop, daemon=True)
+
+                # Logging-only worker: one entry per primary RGB frame, samples robot
+                # state and the most recent commanded action. Bounded queue with
+                # drop-old policy so logging backlog can never lag the camera.
+                state_queue = queue.Queue(maxsize=1)
+                state_worker_stop = threading.Event()
 
                 def state_worker():
                     steps = 0
@@ -87,13 +112,6 @@ def main(cfg: DictConfig):
                         try:
                             state = nuc.get_robot_state()
 
-                            # Log tracking error (actual vs previously commanded pose)
-                            desired_pose = nuc.get_desired_ee_pose()
-                            desired_pos, desired_rot = desired_pose[:3], desired_pose[3:]
-                            pos_err = np.linalg.norm(state["ee_pos"] - desired_pos)
-                            rot_err = (Rotation.from_quat(state["ee_rot"])
-                                       * Rotation.from_quat(desired_rot).inv()).magnitude()
-
                             if ctrl_logging:
                                 diag = nuc.get_controller_diagnostics()
                                 state.update(diag)
@@ -103,8 +121,7 @@ def main(cfg: DictConfig):
                                       f"damp={np.linalg.norm(diag['tau_damping']):.2f} "
                                       f"null={np.linalg.norm(diag['tau_nullspace']):.2f}")
 
-                            current_action = action_step(gello, nuc, cfg.task)
-                            episode_writer.write_state(timestamp=timestamp, action=current_action, **state)
+                            episode_writer.write_state(timestamp=timestamp, action=latest_action[0], **state)
                             steps += 1
                         except Exception as e:
                             print(f"State worker error: {e}")
@@ -114,21 +131,47 @@ def main(cfg: DictConfig):
                 state_thread.start()
 
                 def on_receive_frame(serial, timestamp):
-                    if serial == primary_serial:
-                        state_queue.put(timestamp)
+                    if serial != primary_serial:
+                        return
+                    try:
+                        state_queue.put_nowait(timestamp)
+                    except queue.Full:
+                        # Logging is behind the camera — drop the older pending
+                        # timestamp in favor of the fresher one.
+                        try:
+                            state_queue.get_nowait()
+                        except queue.Empty:
+                            pass
+                        try:
+                            state_queue.put_nowait(timestamp)
+                        except queue.Full:
+                            pass
 
                 rs_interface.reset_frame_counts()
                 rs_interface.start_capture(on_receive_frame)#, on_warmup=nuc.home_gripper)
+                # Recording is now live (phase 4 of start_capture). Zero the
+                # GELLO offset against the robot's current pose and engage
+                # teleop so the operator gets control at the same moment the
+                # first frame is recorded.
+                gello.zero_controls(nuc.get_robot_state()["qpos"])
+                teleop_thread.start()
                 while any([c < cfg.max_episode_timesteps for c in rs_interface.get_frame_counts().values()]):
                     time.sleep(2.0)
                     qsize = state_queue.qsize()
+                    backlog_warn = "  WARN: logging backlog" if qsize > 0 else ""
                     print("Episode progress:", np.array(list(rs_interface.get_frame_counts().values())) / cfg.max_episode_timesteps,
-                          f"  state_queue: {qsize}")
+                          f"  state_queue: {qsize}{backlog_warn}")
 
-                # Wait for state worker to drain remaining items
+                teleop_stop.set()
+                teleop_thread.join()
                 state_worker_stop.set()
                 state_thread.join()
             episode_writer.flush()
+            ok, errors = validate_episode(episode_writer.episode_path)
+            if not ok:
+                print(f"WARNING: episode {episode_writer.episode_path} failed validation:")
+                for err in errors:
+                    print(f"  - {err}")
         except Exception as e:
             print(e)
             traceback.print_exc()
