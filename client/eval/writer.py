@@ -180,22 +180,49 @@ class EvalWriter:
     def episode_path(self):
         return self.path
 
-    def write_trajectory_plot(self, plot_path: Path):
-        state_hist_path = self.path / f"state_action.npz"
+    def _stacked_states(self):
+        if not self.states:
+            return None
         all_keys = self.states[0].keys()
-        stacked_states = {k: np.stack([s[k] for s in self.states]) for k in all_keys}
-        np.savez(state_hist_path, **stacked_states)
-        fig = states_fig(stacked_states)
-        fig.write_html(plot_path)
+        return {k: np.stack([s[k] for s in self.states]) for k in all_keys}
 
-
-    def write_inference_plot(self, plot_path: Path):
-        stacked_infs = {k: np.stack([s[k] for s in self.inferences]) for k in self._inference_keys}
-        fig = inference_fig(stacked_infs)
-        fig.write_html(plot_path)
+    def _stacked_inferences(self):
+        if not self.inferences:
+            return None
+        return {k: np.stack([s[k] for s in self.inferences]) for k in self._inference_keys}
 
     def flush(self):
-        self.write_trajectory_plot(self.path / "states.html")
-        self.write_inference_plot(self.path / "inference.html")
+        """Persist raw arrays first, then plots. Each step is isolated so a
+        single failure (e.g. plotly render, empty buffer) doesn't lose the
+        rest of the data — important when an episode aborts mid-run.
+        """
+        stacked_states = None
+        stacked_infs = None
+
+        try:
+            stacked_states = self._stacked_states()
+            if stacked_states is not None:
+                np.savez(self.path / "state_action.npz", **stacked_states)
+        except Exception as e:
+            print(f"[writer] state_action.npz save failed: {e}")
+
+        try:
+            stacked_infs = self._stacked_inferences()
+            if stacked_infs is not None:
+                np.savez(self.path / "inference.npz", **stacked_infs)
+        except Exception as e:
+            print(f"[writer] inference.npz save failed: {e}")
+
+        if stacked_states is not None:
+            try:
+                states_fig(stacked_states).write_html(self.path / "states.html")
+            except Exception as e:
+                print(f"[writer] states.html render failed: {e}")
+
+        if stacked_infs is not None:
+            try:
+                inference_fig(stacked_infs).write_html(self.path / "inference.html")
+            except Exception as e:
+                print(f"[writer] inference.html render failed: {e}")
 
 

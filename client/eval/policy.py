@@ -2,8 +2,8 @@
 
 :class:`EvalPolicyInterface` communicates with an HTTP policy server to obtain
 robot actions from camera observations and low-dimensional state. Handles frame
-preprocessing (BGR to RGB, resize, channel reordering) and serialization of
-observation tensors for network transfer.
+preprocessing (BGR to RGB, aspect-preserving resize-with-pad, channel reordering)
+and serialization of observation tensors for network transfer.
 """
 import io
 import logging
@@ -55,7 +55,8 @@ class EvalPolicyInterface:
 
     def preprocess_frame(self, frame: torch.Tensor):
         """
-        Resize a batch of image tensors to match self._frame_shape.
+        Resize a batch of image tensors to match self._frame_shape, preserving
+        aspect ratio by zero-padding (matches openpi's ``resize_with_pad``).
 
         Input shape:  (N, H, W, C), dtype: uint8 or float
         Output shape: (N, C, H, W), dtype: uint8
@@ -80,9 +81,18 @@ class EvalPolicyInterface:
         # NHWC → NCHW
         frame = frame.permute(0, 3, 1, 2)
 
-        # Resize if necessary
         if (h, w) != (th, tw):
-            frame = F.interpolate(frame, size=(th, tw), mode='bilinear', align_corners=False)
+            # Scale down so the longer side fits the target, preserving aspect ratio.
+            ratio = max(w / tw, h / th)
+            rh = int(h / ratio)
+            rw = int(w / ratio)
+            resized = F.interpolate(frame, size=(rh, rw), mode='bilinear',
+                                    align_corners=False, antialias=True)
+            padded = torch.zeros((n, tc, th, tw), dtype=resized.dtype, device=resized.device)
+            pad_top = max(0, (th - rh) // 2)
+            pad_left = max(0, (tw - rw) // 2)
+            padded[:, :, pad_top:pad_top + rh, pad_left:pad_left + rw] = resized
+            frame = padded
 
         # Convert back to uint8
         frame = (frame * 255.0).clamp(0, 255).to(torch.uint8)
@@ -156,6 +166,7 @@ class EvalPolicyInterface:
 
             # un-batch
             o = self._offset
+            print(action)
             desired_eef_pos = action[0, o:self._action_horizon + o, :3]
             desired_eef_rot = action[0, o:self._action_horizon + o, 3:7]
             desired_gripper_force = action[0, o:self._action_horizon + o, 7]

@@ -1,12 +1,21 @@
 defaults:
-  - policy: default
+  - policy: borabora
   - task: pusht
 
 policy:
   prompt: ${task.instruction}
 
-max_episode_timesteps: 1000
+max_episode_timesteps: 4000
 start_index: 0
+
+# Hard caps on commanded motion. If the policy emits a horizon whose implied
+# velocity exceeds either limit, the eval script aborts before the command is
+# sent to the robot. Redundant with libfranka's own limits — disable if those
+# are sufficient for your setup.
+safety:
+  enabled: true
+  max_linear_velocity: 0.6    # m/s
+  max_angular_velocity: 2.0   # rad/s
 
 
 
@@ -21,6 +30,7 @@ nuc:
   server:
     controller: ${task.controller}
     gripper_hysteresis: ${task.gripper_hysteresis}
+    gripper_logging: ${task.gripper_logging}
     impedance: ${task.impedance}
 
 realsense:
@@ -29,11 +39,12 @@ realsense:
   height: 720
   fps: 15
   obs_cams:
-    - "148122060186" # high right
     - "932122060415" # high left
-#    - "848312071702" # overhead
-    # - "217222061106" # wrist cam
-#    - "051222062898"
+    # - "148122060186" # high right
+    # - "848312071702" # overhead
+    # - "932122060415" # high left
+    # - "051222062898"
+    - "217222061106" # wrist cam
 
 hydra:
   output_subdir: null

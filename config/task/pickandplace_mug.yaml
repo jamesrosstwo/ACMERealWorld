@@ -1,5 +1,5 @@
 # @package _group_
-instruction: "Pick up the object and place it at in the bucket"
+instruction: "Pick up the green cup and place it in the blue bucket"
 
 home_pos: [0.30582778, 0., 0.48467681]
 home_rot: [1., 0., 0., 0.]
@@ -11,10 +11,11 @@ freeze_gripper: false
 zero_gripper_obs: true  # Zero out gripper obs (matches old collection data)
 open_gripper_on_reset: true
 gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
+gripper_logging: false
 
 controller: cartesian
 
-max_episode_timesteps: 300
+max_episode_timesteps: 600
 
 impedance:
   # Original panda_py CartesianImpedance defaults, converted to explicit gains.

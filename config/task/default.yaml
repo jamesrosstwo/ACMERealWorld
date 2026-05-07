@@ -15,6 +15,9 @@ zero_gripper_obs: false
 
 gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
 
+# Log gripper state transitions (init, grasp, open) and per-step decisions.
+gripper_logging: false
+
 # Log low-level controller diagnostics (position error, velocity error, torque contributions)
 controller_logging: false
 

@@ -15,14 +15,19 @@ import panda_py
 
 
 class GripperInterface:
-    def __init__(self, ip_address: str, hysteresis: float):
-        print(f"Initializing GripperInterface via panda-py at {ip_address}")
+    def __init__(self, ip_address: str, hysteresis: float, logging: bool = True):
+        self._logging = logging
+        self._log(f"Initializing GripperInterface via panda-py at {ip_address}")
         self._gripper = panda_py.libfranka.Gripper(ip_address)
 
         # Async state
         self._thread = None
         self._target_grasp_state = False  # False=Open, True=Grasped
         self._hysteresis = hysteresis
+
+    def _log(self, msg: str):
+        if self._logging:
+            print(f"\t[gripper] {msg}")
 
     def get_state(self):
         state = self._gripper.read_once()
@@ -49,15 +54,16 @@ class GripperInterface:
 
     def _do_grasp(self):
         result = self.grasp(speed=0.1, force=10.0, blocking=False)
-        print(f"\t[gripper] grasp result: {result}")
+        self._log(f"grasp result: {result}")
 
     def _do_open(self):
         mx = self.get_state().max_width
-        print(f"\t[gripper] opening to max_width={mx}")
+        self._log(f"opening to max_width={mx}")
         self.goto(width=mx, speed=0.1, blocking=False)
 
     def act_async(self, gripper_val: float):
         val = float(gripper_val)
+        self._log(f"val={val:.3f}")
 
         grasp_threshold = 0.5 + self._hysteresis
         open_threshold = 0.5 - self._hysteresis
@@ -66,12 +72,12 @@ class GripperInterface:
             return
 
         if val > grasp_threshold and not self._target_grasp_state:
-            print(f"\t[gripper] val={val:.3f} > {grasp_threshold} — GRASPING")
+            self._log(f"val={val:.3f} > {grasp_threshold} — GRASPING")
             self._target_grasp_state = True
             self._thread = threading.Thread(target=self._do_grasp)
             self._thread.start()
         elif val < open_threshold and self._target_grasp_state:
-            print(f"\t[gripper] val={val:.3f} < {open_threshold} — OPENING")
+            self._log(f"val={val:.3f} < {open_threshold} — OPENING")
             self._target_grasp_state = False
             self._thread = threading.Thread(target=self._do_open)
             self._thread.start()
@@ -107,7 +113,8 @@ class NUCInterface:
         self._prev_t = None
 
         hysteresis = server.gripper_hysteresis
-        self._gripper = GripperInterface(self._franka_ip, hysteresis=hysteresis)
+        gripper_logging = server.get("gripper_logging", True)
+        self._gripper = GripperInterface(self._franka_ip, hysteresis=hysteresis, logging=gripper_logging)
 
         self._desired_eef_pos = self._panda.get_position()
         self._desired_eef_rot = self._panda.get_orientation(scalar_first=False)

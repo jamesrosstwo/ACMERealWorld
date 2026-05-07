@@ -16,6 +16,7 @@ nuc:
   server:
     controller: ${task.controller}
     gripper_hysteresis: ${task.gripper_hysteresis}
+    gripper_logging: ${task.gripper_logging}
     impedance: ${task.impedance}
 
 realsense:
@@ -37,7 +38,7 @@ writer:
 gello:
   base_index: 0
   baud_rate: 1000000
-  port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTA2U2FX-if00-port0"
+  port: "/dev/serial/by-id/usb-FTDI_USB__-__Serial_Converter_FTA2U2ER-if00-port0"
   joint_signs:
     - 1
     - 1
@@ -55,8 +56,8 @@ gello:
     - 1.57
     - 0
   gripper:
-    open: 0.35 # from logging the dynamixel joint vals
-    closed: -0.62
+    open: 1.96 # from logging the dynamixel joint vals
+    closed: 0.97
     sign: -1
 
 hydra:

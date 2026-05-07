@@ -11,6 +11,7 @@ pos_mask: [true, true, false]   # xy free, z locked to table height
 max_episode_timesteps: 430
 
 gripper_hysteresis: 0.1
+gripper_logging: false
 
 
 freeze_rotation: true
