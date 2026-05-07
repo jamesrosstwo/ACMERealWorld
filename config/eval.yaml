@@ -13,7 +13,7 @@ start_index: 0
 # sent to the robot. Redundant with libfranka's own limits — disable if those
 # are sufficient for your setup.
 safety:
-  enabled: true
+  enabled: false
   max_linear_velocity: 0.6    # m/s
   max_angular_velocity: 2.0   # rad/s
 
@@ -39,8 +39,8 @@ realsense:
   height: 720
   fps: 15
   obs_cams:
-    - "932122060415" # high left
-    # - "148122060186" # high right
+    # - "932122060415" # high left
+    - "148122060186" # high right
     # - "848312071702" # overhead
     # - "932122060415" # high left
     # - "051222062898"
