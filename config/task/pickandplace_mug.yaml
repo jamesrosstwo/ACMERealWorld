@@ -13,7 +13,7 @@ open_gripper_on_reset: true
 gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
 gripper_logging: false
 
-controller: cartesian
+controller: joint_impedance
 
 max_episode_timesteps: 600
 

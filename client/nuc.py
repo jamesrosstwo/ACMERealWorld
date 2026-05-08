@@ -143,9 +143,18 @@ class NUCInterface:
         impedance, damping, ns_stiffness, ns_damping = self._parse_impedance()
 
         q = self._panda.q.copy()
-        pose = self._panda.get_pose()  # 4x4 homogeneous
-        actual_pos = pose[:3, 3]
-        actual_rot = Rotation.from_matrix(pose[:3, :3])
+        # In joint-space mode `_desired_eef_pos` was set via panda_py.fk on the
+        # commanded qpos, while panda.get_pose() returns the EE pose with any
+        # configured TCP offset — comparing the two introduces a constant frame
+        # mismatch. FK the actual qpos so both sides go through the same model.
+        try:
+            actual_mat = np.array(panda_py.fk(q.reshape(7, 1))).reshape(4, 4)
+            actual_pos = actual_mat[:3, 3]
+            actual_rot = Rotation.from_matrix(actual_mat[:3, :3])
+        except (AttributeError, RuntimeError):
+            pose = self._panda.get_pose()
+            actual_pos = pose[:3, 3]
+            actual_rot = Rotation.from_matrix(pose[:3, :3])
 
         desired_pos = self._desired_eef_pos
         desired_rot = Rotation.from_quat(self._desired_eef_rot)
@@ -227,6 +236,36 @@ class NUCInterface:
         g = gripper.cpu().numpy() if gripper is not None else None
         self.send_control(eef_pos.cpu().numpy(), eef_rot.cpu().numpy(), g)
 
+    @property
+    def is_joint_space(self) -> bool:
+        return self._is_joint_space
+
+    def send_qpos_control(self, qpos: np.ndarray, gripper):
+        """Command a joint configuration directly to a joint-space controller.
+
+        Skips IK. FK updates the cached desired EE pose so diagnostics
+        (`get_controller_diagnostics().cart_pos_error`) and EEF logging stay in
+        sync with the joint command.
+        """
+        assert self._is_joint_space, "send_qpos_control requires a joint-space controller"
+        q = np.asarray(qpos, dtype=np.float64).reshape(7)
+        if self._controller:
+            self._controller.set_control(q)
+        try:
+            mat = np.array(panda_py.fk(q.reshape(7, 1))).reshape(4, 4)
+            self._desired_eef_pos = mat[:3, 3]
+            self._desired_eef_rot = Rotation.from_matrix(mat[:3, :3]).as_quat()
+        except (AttributeError, RuntimeError):
+            pass
+
+        if gripper is not None:
+            g_val = gripper.item() if hasattr(gripper, 'item') else float(gripper)
+            self._gripper.act_async(g_val)
+
+    def send_qpos_control_tensor(self, qpos: torch.Tensor, gripper):
+        g = gripper.cpu().numpy() if gripper is not None else None
+        self.send_qpos_control(qpos.cpu().numpy(), g)
+
     def home_gripper(self):
         """Calibrate the gripper via homing in a background thread."""
         threading.Thread(target=self._gripper._gripper.homing, daemon=True).start()
@@ -254,6 +293,19 @@ class NUCInterface:
                 Kxd=damping,
                 Kq=ns_stiffness,
                 Kqd=ns_damping,
+            )
+        elif ctrl_type == "joint_impedance":
+            # Pure joint-space impedance with libfranka's joint_impedance_control
+            # example gains — stiff enough for trajectory tracking. Intentionally
+            # ignores impedance config so eval doesn't inherit per-task soft
+            # nullspace values that were tuned for the Cartesian controller.
+            self._is_joint_space = True
+            kq = np.array([[600., 600., 600., 600., 250., 150., 50.]]).T
+            kqd = np.array([[50., 50., 50., 50., 30., 25., 15.]]).T
+            return controllers.JointPosition(
+                stiffness=kq,
+                damping=kqd,
+                filter_coeff=1.0,  # 1.0 = no setpoint smoothing
             )
         else:
             self._is_joint_space = False

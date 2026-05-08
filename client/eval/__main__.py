@@ -103,24 +103,27 @@ def start_control_loop(
         resized_frames = [policy.preprocess_frame(f) for f in frames]
         # TODO:  A little weird this goes through the writer, but whatever
         all_states = writer.get_states_snapshot()
-        eef_pos = np.stack([s["ee_pos"] for s in all_states[-policy.obs_history_size:]])
-        eef_rot = np.stack([s["ee_rot"] for s in all_states[-policy.obs_history_size:]])
+        recent = all_states[-policy.obs_history_size:]
+        eef_pos = np.stack([s["ee_pos"] for s in recent])
+        eef_rot = np.stack([s["ee_rot"] for s in recent])
+        qpos = np.stack([s["qpos"] for s in recent])
 
         if task_cfg.zero_gripper_obs:
             gripper_force = np.zeros((policy.obs_history_size, 1))
         else:
-            gripper_force = np.stack([s["gripper_force"] for s in all_states[-policy.obs_history_size:]]).reshape(-1, 1)
+            gripper_force = np.stack([s["gripper_force"] for s in recent]).reshape(-1, 1)
 
 
         # Slice observation to active position dims (frozen dims excluded)
         eef_pos = eef_pos[:, pos_mask]
 
-        desired_eef_pos, desired_eef_quat, desired_gripper_force = policy(
+        desired_eef_pos, desired_eef_quat, desired_gripper_force, desired_qpos = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
             rgb_1=resized_frames[1].unsqueeze(0),
             eef_pos=np.expand_dims(eef_pos, 0),
             eef_quat=np.expand_dims(eef_rot, 0),
-            gripper_force=np.expand_dims(gripper_force, 0)
+            gripper_force=np.expand_dims(gripper_force, 0),
+            qpos=np.expand_dims(qpos, 0),
         )
 
 
@@ -130,6 +133,7 @@ def start_control_loop(
         home_eef_pos, home_eef_rot = nuc.home
         desired_eef_pos = desired_eef_pos.to(torch.float64)
         desired_eef_quat = desired_eef_quat.to(torch.float64)
+        desired_qpos = desired_qpos.to(torch.float64)
 
         # Replace frozen position dims with home values
         frozen = torch.from_numpy(~pos_mask)
@@ -138,13 +142,15 @@ def start_control_loop(
             desired_eef_quat = torch.zeros((horizon_len, 4), dtype=torch.float64)
             desired_eef_quat[:] = torch.from_numpy(home_eef_rot)
 
+        desired_qpos_np = desired_qpos.numpy()
         writer.on_inference(
             ee_pos=eef_pos,
             ee_quat=eef_rot,
             gripper_force=gripper_force,
             desired_ee_pos=desired_eef_pos.numpy(),
             desired_ee_quat=desired_eef_quat.numpy(),
-            desired_gripper_force=desired_gripper_force.numpy().reshape(-1, 1)
+            desired_gripper_force=desired_gripper_force.numpy().reshape(-1, 1),
+            desired_qpos=desired_qpos_np,
         )
         per_step_sleep = 1.0 / (policy.control_frequency * horizon_len)
 
@@ -176,10 +182,40 @@ def start_control_loop(
 
         for i in range(horizon_len):
             gripper_cmd = None if task_cfg.freeze_gripper else desired_gripper_force[i]
-            nuc.send_control_tensor(desired_eef_pos[i], desired_eef_quat[i], gripper_cmd)
+            if nuc.is_joint_space:
+                nuc.send_qpos_control_tensor(desired_qpos[i], gripper_cmd)
+            else:
+                nuc.send_control_tensor(desired_eef_pos[i], desired_eef_quat[i], gripper_cmd)
             time.sleep(per_step_sleep)
         time.sleep(2 * per_step_sleep)
-        eef_pos = nuc.get_robot_state()["ee_pos"]
+
+        post_state = nuc.get_robot_state()
+        try:
+            diag = nuc.get_controller_diagnostics()
+            cart_pos_error = diag["cart_pos_error"]
+        except Exception as e:
+            print(f"[ctrl-err] diagnostics failed: {e}")
+            cart_pos_error = np.full(6, np.nan, dtype=np.float32)
+
+        pos_err_norm = float(np.linalg.norm(cart_pos_error[:3]))
+        rot_err_norm = float(np.linalg.norm(cart_pos_error[3:]))
+        qpos_error = desired_qpos_np[-1] - post_state["qpos"]
+        qpos_err_max_deg = float(np.degrees(np.max(np.abs(qpos_error))))
+        print(
+            f"[ctrl-err] pos={pos_err_norm * 1000:.1f}mm rot={np.degrees(rot_err_norm):.2f}deg "
+            f"qpos_max={qpos_err_max_deg:.2f}deg "
+            f"qpos={np.array2string(post_state['qpos'], precision=3, suppress_small=True)}"
+        )
+        writer.on_horizon_complete(
+            qpos=post_state["qpos"],
+            ee_pos=post_state["ee_pos"],
+            ee_rot=post_state["ee_rot"],
+            desired_ee_pos=desired_pos_np[-1],
+            desired_ee_quat=desired_quat_np[-1],
+            desired_qpos=desired_qpos_np[-1],
+            cart_pos_error=cart_pos_error,
+            qpos_error=qpos_error,
+        )
 
     def _loop_runner():
         while not stop_event.is_set():

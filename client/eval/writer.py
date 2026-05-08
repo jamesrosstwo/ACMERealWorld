@@ -160,8 +160,10 @@ class EvalWriter:
         self._states_lock = threading.Lock()
         self.states = []
         self.inferences = []
+        self.horizon_completions = []
         self._state_keys = ["qpos", "ee_pos", "ee_rot", "gripper_force", "action"]
-        self._inference_keys = ["ee_pos", "ee_quat", "gripper_force", "desired_ee_pos", "desired_ee_quat", "desired_gripper_force"]
+        self._inference_keys = ["ee_pos", "ee_quat", "gripper_force", "desired_ee_pos", "desired_ee_quat", "desired_gripper_force", "desired_qpos"]
+        self._horizon_completion_keys = ["qpos", "ee_pos", "ee_rot", "desired_ee_pos", "desired_ee_quat", "desired_qpos", "cart_pos_error", "qpos_error"]
 
     def get_states_snapshot(self):
         with self._states_lock:
@@ -175,6 +177,10 @@ class EvalWriter:
     def on_inference(self, **inference: np.ndarray):
         assert all([k in inference for k in self._inference_keys])
         self.inferences.append(inference)
+
+    def on_horizon_complete(self, **completion: np.ndarray):
+        assert all([k in completion for k in self._horizon_completion_keys])
+        self.horizon_completions.append(completion)
 
     @property
     def episode_path(self):
@@ -190,6 +196,14 @@ class EvalWriter:
         if not self.inferences:
             return None
         return {k: np.stack([s[k] for s in self.inferences]) for k in self._inference_keys}
+
+    def _stacked_horizon_completions(self):
+        if not self.horizon_completions:
+            return None
+        return {
+            k: np.stack([h[k] for h in self.horizon_completions])
+            for k in self._horizon_completion_keys
+        }
 
     def flush(self):
         """Persist raw arrays first, then plots. Each step is isolated so a
@@ -212,6 +226,13 @@ class EvalWriter:
                 np.savez(self.path / "inference.npz", **stacked_infs)
         except Exception as e:
             print(f"[writer] inference.npz save failed: {e}")
+
+        try:
+            stacked_hc = self._stacked_horizon_completions()
+            if stacked_hc is not None:
+                np.savez(self.path / "horizon_completions.npz", **stacked_hc)
+        except Exception as e:
+            print(f"[writer] horizon_completions.npz save failed: {e}")
 
         if stacked_states is not None:
             try:

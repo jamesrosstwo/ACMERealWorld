@@ -2,8 +2,8 @@ defaults:
   - default
 
 host: 142.1.46.125
-port: 53263
-control_frequency: 1
+port: 53434
+control_frequency: 0.5
 obs_history: 1
-action_horizon: 15
+action_horizon: 40
 action_start_offset: 2

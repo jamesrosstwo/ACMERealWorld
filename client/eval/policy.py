@@ -14,6 +14,8 @@ import torch.nn.functional as F
 from typing import List, Tuple
 
 import numpy as np
+import panda_py
+from scipy.spatial.transform import Rotation
 
 
 class EvalPolicyInterface:
@@ -99,12 +101,26 @@ class EvalPolicyInterface:
 
         return frame
 
+    @staticmethod
+    def _fk_horizon(qpos_horizon: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """FK a (T, 7) joint trajectory into (T, 3) EEF position and (T, 4) xyzw quaternion."""
+        q_np = qpos_horizon.detach().cpu().numpy().astype(np.float64)
+        T = q_np.shape[0]
+        eef_pos = np.zeros((T, 3), dtype=np.float64)
+        eef_rot = np.zeros((T, 4), dtype=np.float64)
+        for i in range(T):
+            mat = np.array(panda_py.fk(q_np[i].reshape(7, 1))).reshape(4, 4)
+            eef_pos[i] = mat[:3, 3]
+            eef_rot[i] = Rotation.from_matrix(mat[:3, :3]).as_quat()
+        return torch.from_numpy(eef_pos), torch.from_numpy(eef_rot)
+
     def __call__(self,
                  rgb_0: torch.Tensor,
                  rgb_1: torch.Tensor,
                  eef_pos: np.ndarray,
                  eef_quat: np.ndarray,
-                 gripper_force: np.ndarray) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                 gripper_force: np.ndarray,
+                 qpos: np.ndarray) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Send binary data using multipart/form-data for efficient transfer.
         """
@@ -127,7 +143,8 @@ class EvalPolicyInterface:
         lowdim_data = {
             "eef_pos": eef_pos,
             "eef_quat": eef_quat,
-            "gripper_force": gripper_force
+            "gripper_force": gripper_force,
+            "qpos": qpos,
         }
 
         lowdim_buffer = io.BytesIO()
@@ -160,17 +177,19 @@ class EvalPolicyInterface:
             action = torch.tensor(result["action"])
             if self._delta_actions:
                 cumulative = torch.cumsum(action, dim=1)
-                cumulative[:, :, :3] += eef_pos[:, -1]
-                cumulative[:, :, 3:7] += eef_quat[:, -1]
+                cumulative[:, :, :7] += qpos[:, -1]
                 return cumulative
 
-            # un-batch
+            # un-batch. Action layout: [qpos(7), gripper(1)] per step.
             o = self._offset
             print(action)
-            desired_eef_pos = action[0, o:self._action_horizon + o, :3]
-            desired_eef_rot = action[0, o:self._action_horizon + o, 3:7]
+            desired_qpos = action[0, o:self._action_horizon + o, :7]
             desired_gripper_force = action[0, o:self._action_horizon + o, 7]
-            return desired_eef_pos, desired_eef_rot, desired_gripper_force
+
+            # Derive EEF trajectory via FK so safety / writer / plotter still
+            # have a Cartesian view of the commanded motion.
+            desired_eef_pos, desired_eef_rot = self._fk_horizon(desired_qpos)
+            return desired_eef_pos, desired_eef_rot, desired_gripper_force, desired_qpos
         except Exception as err:
             logging.info(f"Error communicating with the server: {err}")
             raise err

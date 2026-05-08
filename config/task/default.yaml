@@ -21,8 +21,12 @@ gripper_logging: false
 # Log low-level controller diagnostics (position error, velocity error, torque contributions)
 controller_logging: false
 
-# Controller type: "cartesian" (CartesianImpedance) or "hybrid_joint" (HybridJointImpedance)
-controller: hybrid_joint
+# Controller type:
+#   "cartesian"        → PolymetisImpedance (Cartesian impedance, EEF target)
+#   "hybrid_joint"     → HybridJointImpedance (Cartesian + joint impedance, qpos target)
+#   "joint_impedance"  → JointPosition (pure joint impedance, qpos target — DROID-style)
+# Joint-space modes consume `desired_qpos` from the policy server directly (no IK).
+controller: joint_impedance
 
 impedance:
   # Polymetis franka_hardware.yaml defaults (exact match).

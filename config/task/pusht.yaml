@@ -19,7 +19,7 @@ freeze_gripper: true
 
 zero_gripper_obs: true  # Zero out gripper obs (matches old collection data)
 open_gripper_on_reset: false
-controller: cartesian
+controller: joint_impedance
 
 impedance:
   # Polymetis franka_hardware.yaml defaults (exact match).
