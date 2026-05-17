@@ -1,11 +1,11 @@
 defaults:
-  - policy: borabora
+  - policy: jeju_dp
   - task: pusht
 
 policy:
   prompt: ${task.instruction}
 
-max_episode_timesteps: 4000
+max_episode_timesteps: 1000
 start_index: 0
 
 # Hard caps on commanded motion. If the policy emits a horizon whose implied
@@ -39,11 +39,13 @@ realsense:
   height: 720
   fps: 15
   obs_cams:
-    # - "932122060415" # high left
-    - "148122060186" # high right
+    # - "148122060186" # high right
+
+    - "932122060415" # high left
     # - "848312071702" # overhead
     # - "932122060415" # high left
-    # - "051222062898"
+    # - "051222062898" # aug left
+    # - "102122061570" # aug right
     - "217222061106" # wrist cam
 
 hydra:

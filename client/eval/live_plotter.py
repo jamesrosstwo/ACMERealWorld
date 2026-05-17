@@ -1,53 +1,70 @@
-"""Live 3D matplotlib visualization of the policy action trace during eval.
+"""Live matplotlib visualization of end-effector tracking error during eval.
 
-A non-blocking matplotlib window that plots the actual end-effector path
-alongside the most recent policy-issued action horizon. Intended to be
-constructed and ticked from the main thread.
+A non-blocking matplotlib window that plots the per-axis position error
+(commanded EE pose minus measured EE pose) over time. Used to spot impedance
+saturation, lag, or controller instability while a policy is running.
+Constructed and ticked from the main thread.
 """
 from __future__ import annotations
 
 import numpy as np
 
 
-class LiveActionPlotter:
-    def __init__(self, title: str = "EEF trajectory (live)"):
+class LiveControlErrorPlotter:
+    def __init__(self, title: str = "EEF control error (live)", window: int = 600):
         import matplotlib.pyplot as plt  # imported lazily so headless eval still works
         self._plt = plt
+        self._window = window
         plt.ion()
-        self.fig = plt.figure(figsize=(7, 6))
-        self.ax = self.fig.add_subplot(111, projection="3d")
-        self.ax.set_xlabel("X")
-        self.ax.set_ylabel("Y")
-        self.ax.set_zlabel("Z")
+        self.fig, self.ax = plt.subplots(figsize=(8, 4))
+        self.ax.set_xlabel("sample")
+        self.ax.set_ylabel("commanded − measured (m)")
         self.ax.set_title(title)
-        (self._eef_line,) = self.ax.plot([], [], [], color="tab:blue", linewidth=2, label="EEF")
-        (self._action_line,) = self.ax.plot(
-            [], [], [], color="tab:red", linewidth=2, marker="o", markersize=3, label="Action trace"
+        self.ax.axhline(0.0, color="black", linewidth=0.5, alpha=0.5)
+        (self._x_line,) = self.ax.plot([], [], color="tab:red", linewidth=1.2, label="x")
+        (self._y_line,) = self.ax.plot([], [], color="tab:green", linewidth=1.2, label="y")
+        (self._z_line,) = self.ax.plot([], [], color="tab:blue", linewidth=1.2, label="z")
+        (self._norm_line,) = self.ax.plot(
+            [], [], color="black", linewidth=1.8, alpha=0.7, label="‖err‖"
         )
-        self.ax.legend(loc="upper left")
+        self.ax.legend(loc="upper right", ncols=4, fontsize=8)
+        self.fig.tight_layout()
         self.fig.canvas.draw()
         plt.show(block=False)
 
-    def update(self, eef_pos: np.ndarray, action_pos: np.ndarray) -> None:
-        eef_pos = np.asarray(eef_pos).reshape(-1, 3) if eef_pos is not None else np.empty((0, 3))
-        action_pos = np.asarray(action_pos).reshape(-1, 3) if action_pos is not None else np.empty((0, 3))
+    def update(self, ee_pos: np.ndarray, desired_ee_pos: np.ndarray) -> None:
+        """Plot the trailing ``window`` samples of (desired − measured) per axis.
 
-        if eef_pos.shape[0]:
-            self._eef_line.set_data(eef_pos[:, 0], eef_pos[:, 1])
-            self._eef_line.set_3d_properties(eef_pos[:, 2])
-        if action_pos.shape[0]:
-            self._action_line.set_data(action_pos[:, 0], action_pos[:, 1])
-            self._action_line.set_3d_properties(action_pos[:, 2])
+        Both inputs are expected to be (N, 3) and aligned sample-for-sample.
+        Mismatched lengths are truncated to the shorter tail.
+        """
+        ee = np.asarray(ee_pos).reshape(-1, 3) if ee_pos is not None else np.empty((0, 3))
+        des = np.asarray(desired_ee_pos).reshape(-1, 3) if desired_ee_pos is not None else np.empty((0, 3))
+        n = min(ee.shape[0], des.shape[0])
+        if n == 0:
+            self.fig.canvas.draw_idle()
+            self.fig.canvas.flush_events()
+            return
 
-        pts = [p for p in (eef_pos, action_pos) if p.shape[0]]
-        if pts:
-            stacked = np.vstack(pts)
-            mn, mx = stacked.min(axis=0), stacked.max(axis=0)
-            ctr = (mn + mx) / 2
-            half = max((mx - mn).max() / 2, 0.05) * 1.2
-            self.ax.set_xlim(ctr[0] - half, ctr[0] + half)
-            self.ax.set_ylim(ctr[1] - half, ctr[1] + half)
-            self.ax.set_zlim(ctr[2] - half, ctr[2] + half)
+        err = des[-n:] - ee[-n:]
+        if n > self._window:
+            err = err[-self._window:]
+            n = self._window
+        norm = np.linalg.norm(err, axis=1)
+
+        # x-axis is the absolute sample index of the trailing window, so the
+        # view scrolls with the episode rather than rebasing to 0 each tick.
+        end = ee.shape[0]
+        idx = np.arange(end - n, end)
+
+        self._x_line.set_data(idx, err[:, 0])
+        self._y_line.set_data(idx, err[:, 1])
+        self._z_line.set_data(idx, err[:, 2])
+        self._norm_line.set_data(idx, norm)
+
+        self.ax.set_xlim(idx[0], max(idx[-1], idx[0] + 1))
+        ymax = max(float(np.abs(err).max()), float(norm.max()), 1e-3) * 1.15
+        self.ax.set_ylim(-ymax, ymax)
 
         self.fig.canvas.draw_idle()
         self.fig.canvas.flush_events()

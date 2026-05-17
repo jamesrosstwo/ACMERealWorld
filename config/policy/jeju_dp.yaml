@@ -1,0 +1,16 @@
+defaults:
+  - jeju
+
+host: localhost
+port: 52339
+control_frequency: 0.75
+obs_history: 2
+action_horizon: 24
+action_start_offset: 2
+frame_shape:
+  - 3
+  - 256
+  - 256
+# Match the pre-VLA stretched-bilinear preprocessing the DPs were trained on.
+antialias: false
+resize_with_pad: false

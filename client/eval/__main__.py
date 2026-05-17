@@ -27,7 +27,7 @@ from omegaconf import DictConfig, OmegaConf
 from client.eval.realsense import EvalRealsense
 from client.eval.writer import EvalWriter
 from client.eval.policy import EvalPolicyInterface
-from client.eval.live_plotter import LiveActionPlotter
+from client.eval.live_plotter import LiveControlErrorPlotter
 from client.nuc import NUCInterface
 
 
@@ -202,9 +202,9 @@ def record_episode(cfg, ep_path, nuc, policy):
         with EvalRealsense(**cfg.realsense) as rsi:
             writer = EvalWriter(path=ep_path, **cfg.writer)
             try:
-                plotter = LiveActionPlotter()
+                plotter = LiveControlErrorPlotter()
             except Exception as e:
-                print(f"[viz] Failed to start live action plot ({e}); continuing without it.")
+                print(f"[viz] Failed to start live control-error plot ({e}); continuing without it.")
                 plotter = None
             nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
 
@@ -237,15 +237,14 @@ def record_episode(cfg, ep_path, nuc, policy):
                 while any([c < cfg.max_episode_timesteps for c in rsi.get_frame_counts().values()]):
                     if plotter is not None:
                         states = writer.get_states_snapshot()
-                        eef_hist = (
-                            np.stack([s["ee_pos"] for s in states]) if states else np.empty((0, 3))
-                        )
-                        inferences = writer.inferences
-                        action_trace = (
-                            inferences[-1]["desired_ee_pos"] if len(inferences) else np.empty((0, 3))
-                        )
+                        if states:
+                            ee_hist = np.stack([s["ee_pos"] for s in states])
+                            desired_hist = np.stack([s["action"][:3] for s in states])
+                        else:
+                            ee_hist = np.empty((0, 3))
+                            desired_hist = np.empty((0, 3))
                         try:
-                            plotter.update(eef_hist, action_trace)
+                            plotter.update(ee_hist, desired_hist)
                         except Exception as e:
                             print(f"[viz] Live plot update failed ({e}); disabling.")
                             plotter.close()

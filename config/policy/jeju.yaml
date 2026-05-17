@@ -12,3 +12,6 @@ frame_shape:
   - 3
   - 224
   - 224
+# Frame preprocessing — openpi/π0-style by default.
+antialias: true
+resize_with_pad: true

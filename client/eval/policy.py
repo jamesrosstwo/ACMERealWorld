@@ -31,7 +31,9 @@ class EvalPolicyInterface:
                  port: int,
                  delta_actions: bool = False,
                  host: str = "localhost",
-                 prompt: str = ""):
+                 prompt: str = "",
+                 antialias: bool = True,
+                 resize_with_pad: bool = True):
         self._control_frequency = control_frequency
         self._obs_history = obs_history
         self._action_horizon = action_horizon
@@ -44,6 +46,8 @@ class EvalPolicyInterface:
         self._server_url = f'http://{self._host}:{self._port}'
         self._delta_actions = delta_actions
         self._prompt = prompt
+        self._antialias = antialias
+        self._resize_with_pad = resize_with_pad
 
     @property
     def obs_history_size(self):
@@ -55,8 +59,14 @@ class EvalPolicyInterface:
 
     def preprocess_frame(self, frame: torch.Tensor):
         """
-        Resize a batch of image tensors to match self._frame_shape, preserving
-        aspect ratio by zero-padding (matches openpi's ``resize_with_pad``).
+        Resize a batch of image tensors to match self._frame_shape.
+
+        When ``resize_with_pad`` is true, aspect ratio is preserved by
+        zero-padding (matches openpi's ``resize_with_pad``) — required for
+        openpi/π0-style VLAs. When false, the frame is stretched directly to
+        the target shape; this is what older diffusion policies were trained
+        on. ``antialias`` toggles the PIL-style prefilter inside the bilinear
+        downsample — turn it off to reproduce pre-VLA preprocessing exactly.
 
         Input shape:  (N, H, W, C), dtype: uint8 or float
         Output shape: (N, C, H, W), dtype: uint8
@@ -82,17 +92,21 @@ class EvalPolicyInterface:
         frame = frame.permute(0, 3, 1, 2)
 
         if (h, w) != (th, tw):
-            # Scale down so the longer side fits the target, preserving aspect ratio.
-            ratio = max(w / tw, h / th)
-            rh = int(h / ratio)
-            rw = int(w / ratio)
-            resized = F.interpolate(frame, size=(rh, rw), mode='bilinear',
-                                    align_corners=False, antialias=True)
-            padded = torch.zeros((n, tc, th, tw), dtype=resized.dtype, device=resized.device)
-            pad_top = max(0, (th - rh) // 2)
-            pad_left = max(0, (tw - rw) // 2)
-            padded[:, :, pad_top:pad_top + rh, pad_left:pad_left + rw] = resized
-            frame = padded
+            if self._resize_with_pad:
+                # Scale down so the longer side fits the target, preserving aspect ratio.
+                ratio = max(w / tw, h / th)
+                rh = int(h / ratio)
+                rw = int(w / ratio)
+                resized = F.interpolate(frame, size=(rh, rw), mode='bilinear',
+                                        align_corners=False, antialias=self._antialias)
+                padded = torch.zeros((n, tc, th, tw), dtype=resized.dtype, device=resized.device)
+                pad_top = max(0, (th - rh) // 2)
+                pad_left = max(0, (tw - rw) // 2)
+                padded[:, :, pad_top:pad_top + rh, pad_left:pad_left + rw] = resized
+                frame = padded
+            else:
+                frame = F.interpolate(frame, size=(th, tw), mode='bilinear',
+                                      align_corners=False, antialias=self._antialias)
 
         # Convert back to uint8
         frame = (frame * 255.0).clamp(0, 255).to(torch.uint8)
@@ -166,7 +180,6 @@ class EvalPolicyInterface:
 
             # un-batch
             o = self._offset
-            print(action)
             desired_eef_pos = action[0, o:self._action_horizon + o, :3]
             desired_eef_rot = action[0, o:self._action_horizon + o, 3:7]
             desired_gripper_force = action[0, o:self._action_horizon + o, 7]
