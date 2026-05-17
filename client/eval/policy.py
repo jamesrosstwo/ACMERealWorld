@@ -14,6 +14,8 @@ import torch.nn.functional as F
 from typing import List, Tuple
 
 import numpy as np
+import panda_py
+from scipy.spatial.transform import Rotation
 
 
 class EvalPolicyInterface:
@@ -30,10 +32,13 @@ class EvalPolicyInterface:
                  frame_shape: List[int],
                  port: int,
                  delta_actions: bool = False,
+                 action_type: str = "cartesian",
                  host: str = "localhost",
                  prompt: str = "",
                  antialias: bool = True,
                  resize_with_pad: bool = True):
+        if action_type not in ("qpos", "cartesian"):
+            raise ValueError(f"action_type must be 'qpos' or 'cartesian', got {action_type!r}")
         self._control_frequency = control_frequency
         self._obs_history = obs_history
         self._action_horizon = action_horizon
@@ -45,6 +50,7 @@ class EvalPolicyInterface:
         self._host = host
         self._server_url = f'http://{self._host}:{self._port}'
         self._delta_actions = delta_actions
+        self._action_type = action_type
         self._prompt = prompt
         self._antialias = antialias
         self._resize_with_pad = resize_with_pad
@@ -113,14 +119,33 @@ class EvalPolicyInterface:
 
         return frame
 
+    @staticmethod
+    def _fk_horizon(qpos_horizon: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """FK a (T, 7) joint trajectory into (T, 3) EEF position and (T, 4) xyzw quaternion."""
+        q_np = qpos_horizon.detach().cpu().numpy().astype(np.float64)
+        T = q_np.shape[0]
+        eef_pos = np.zeros((T, 3), dtype=np.float64)
+        eef_rot = np.zeros((T, 4), dtype=np.float64)
+        for i in range(T):
+            mat = np.array(panda_py.fk(q_np[i].reshape(7, 1))).reshape(4, 4)
+            eef_pos[i] = mat[:3, 3]
+            eef_rot[i] = Rotation.from_matrix(mat[:3, :3]).as_quat()
+        return torch.from_numpy(eef_pos), torch.from_numpy(eef_rot)
+
     def __call__(self,
                  rgb_0: torch.Tensor,
                  rgb_1: torch.Tensor,
                  eef_pos: np.ndarray,
                  eef_quat: np.ndarray,
-                 gripper_force: np.ndarray) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+                 gripper_force: np.ndarray,
+                 qpos: np.ndarray) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Send binary data using multipart/form-data for efficient transfer.
+
+        Returns (desired_eef_pos, desired_eef_rot, desired_gripper_force, desired_qpos)
+        regardless of action_type — the qpos vs cartesian wire format only
+        determines how the 8-dim action returned by the server is parsed; both
+        downstream consumers (writer, settle, dispatch) get the same shape.
         """
         data = {}
 
@@ -141,7 +166,8 @@ class EvalPolicyInterface:
         lowdim_data = {
             "eef_pos": eef_pos,
             "eef_quat": eef_quat,
-            "gripper_force": gripper_force
+            "gripper_force": gripper_force,
+            "qpos": qpos,
         }
 
         lowdim_buffer = io.BytesIO()
@@ -178,12 +204,30 @@ class EvalPolicyInterface:
                 cumulative[:, :, 3:7] += eef_quat[:, -1]
                 return cumulative
 
-            # un-batch
+            # un-batch. Server always returns 8 dims per step; the meaning
+            # depends on action_type. In both modes the return tuple is the
+            # same shape so downstream code (writer / settle / dispatch)
+            # doesn't branch.
             o = self._offset
-            desired_eef_pos = action[0, o:self._action_horizon + o, :3]
-            desired_eef_rot = action[0, o:self._action_horizon + o, 3:7]
-            desired_gripper_force = action[0, o:self._action_horizon + o, 7]
-            return desired_eef_pos, desired_eef_rot, desired_gripper_force
+            window = action[0, o:self._action_horizon + o]
+            if self._action_type == "cartesian":
+                # Layout: [px, py, pz, qx, qy, qz, qw, gripper] per step.
+                desired_eef_pos = window[:, :3]
+                desired_eef_rot = window[:, 3:7]
+                desired_gripper_force = window[:, 7]
+                # Placeholder: broadcast latest observed qpos across horizon.
+                # Used only by writer / diagnostics; cartesian dispatch never
+                # consults desired_qpos for control.
+                q_obs = torch.as_tensor(qpos[0, -1], dtype=torch.float64).reshape(1, 7)
+                desired_qpos = q_obs.expand(desired_eef_pos.shape[0], 7).clone()
+            else:
+                # Layout: [qpos(7), gripper(1)] per step.
+                desired_qpos = window[:, :7]
+                desired_gripper_force = window[:, 7]
+                # Derive EEF trajectory via FK so safety / writer / settle
+                # still have a Cartesian view of the commanded motion.
+                desired_eef_pos, desired_eef_rot = self._fk_horizon(desired_qpos)
+            return desired_eef_pos, desired_eef_rot, desired_gripper_force, desired_qpos
         except Exception as err:
             logging.info(f"Error communicating with the server: {err}")
             raise err

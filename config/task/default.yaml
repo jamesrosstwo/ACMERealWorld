@@ -24,6 +24,11 @@ controller_logging: false
 # Controller type: "cartesian" (CartesianImpedance) or "hybrid_joint" (HybridJointImpedance)
 controller: hybrid_joint
 
+# What the policy server returns per action step:
+#   "cartesian" → [px, py, pz, qx, qy, qz, qw, gripper]
+#   "qpos"      → [qpos(7), gripper(1)] — client FKs to derive a Cartesian view
+action_type: cartesian
+
 impedance:
   # Polymetis franka_hardware.yaml defaults (exact match).
   translational_stiffness: [750, 750, 750]  # N/m

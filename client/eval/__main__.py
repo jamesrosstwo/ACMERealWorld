@@ -86,6 +86,7 @@ def start_control_loop(
         nuc: NUCInterface,
         task_cfg: DictConfig,
         safety_cfg: DictConfig,
+        settle_cfg: DictConfig,
 ):
     stop_event = threading.Event()
     safety_state = {"violation": None}
@@ -94,6 +95,12 @@ def start_control_loop(
     safety_enabled = bool(safety_cfg.get("enabled", True))
     max_lin_vel = float(safety_cfg.max_linear_velocity)
     max_ang_vel = float(safety_cfg.max_angular_velocity)
+    settle_threshold_m = float(settle_cfg.threshold_mm) / 1000.0
+    settle_timeout_s = float(settle_cfg.timeout_s)
+    settle_poll_s = float(settle_cfg.poll_period_s)
+    action_type = str(task_cfg.get("action_type", "cartesian"))
+    if action_type not in ("qpos", "cartesian"):
+        raise ValueError(f"task.action_type must be 'qpos' or 'cartesian', got {action_type!r}")
     prev_cmd = {"pos": None, "quat": None}
     if not safety_enabled:
         print("[SAFETY] Custom motion safety check disabled; relying on robot-side limits.")
@@ -103,33 +110,34 @@ def start_control_loop(
         resized_frames = [policy.preprocess_frame(f) for f in frames]
         # TODO:  A little weird this goes through the writer, but whatever
         all_states = writer.get_states_snapshot()
-        eef_pos = np.stack([s["ee_pos"] for s in all_states[-policy.obs_history_size:]])
-        eef_rot = np.stack([s["ee_rot"] for s in all_states[-policy.obs_history_size:]])
+        recent = all_states[-policy.obs_history_size:]
+        eef_pos = np.stack([s["ee_pos"] for s in recent])
+        eef_rot = np.stack([s["ee_rot"] for s in recent])
+        qpos = np.stack([s["qpos"] for s in recent])
 
         if task_cfg.zero_gripper_obs:
             gripper_force = np.zeros((policy.obs_history_size, 1))
         else:
-            gripper_force = np.stack([s["gripper_force"] for s in all_states[-policy.obs_history_size:]]).reshape(-1, 1)
+            gripper_force = np.stack([s["gripper_force"] for s in recent]).reshape(-1, 1)
 
 
         # Slice observation to active position dims (frozen dims excluded)
         eef_pos = eef_pos[:, pos_mask]
 
-        desired_eef_pos, desired_eef_quat, desired_gripper_force = policy(
+        desired_eef_pos, desired_eef_quat, desired_gripper_force, desired_qpos = policy(
             rgb_0=resized_frames[0].unsqueeze(0),
             rgb_1=resized_frames[1].unsqueeze(0),
             eef_pos=np.expand_dims(eef_pos, 0),
             eef_quat=np.expand_dims(eef_rot, 0),
-            gripper_force=np.expand_dims(gripper_force, 0)
+            gripper_force=np.expand_dims(gripper_force, 0),
+            qpos=np.expand_dims(qpos, 0),
         )
-
-
-
 
         horizon_len = desired_eef_pos.shape[0]
         home_eef_pos, home_eef_rot = nuc.home
         desired_eef_pos = desired_eef_pos.to(torch.float64)
         desired_eef_quat = desired_eef_quat.to(torch.float64)
+        desired_qpos = desired_qpos.to(torch.float64)
 
         # Replace frozen position dims with home values
         frozen = torch.from_numpy(~pos_mask)
@@ -144,7 +152,8 @@ def start_control_loop(
             gripper_force=gripper_force,
             desired_ee_pos=desired_eef_pos.numpy(),
             desired_ee_quat=desired_eef_quat.numpy(),
-            desired_gripper_force=desired_gripper_force.numpy().reshape(-1, 1)
+            desired_gripper_force=desired_gripper_force.numpy().reshape(-1, 1),
+            desired_qpos=desired_qpos.numpy(),
         )
         per_step_sleep = 1.0 / (policy.control_frequency * horizon_len)
 
@@ -176,10 +185,42 @@ def start_control_loop(
 
         for i in range(horizon_len):
             gripper_cmd = None if task_cfg.freeze_gripper else desired_gripper_force[i]
-            nuc.send_control_tensor(desired_eef_pos[i], desired_eef_quat[i], gripper_cmd)
+            if action_type == "qpos":
+                nuc.send_qpos_control_tensor(desired_qpos[i], gripper_cmd)
+            else:
+                nuc.send_control_tensor(desired_eef_pos[i], desired_eef_quat[i], gripper_cmd)
             time.sleep(per_step_sleep)
-        time.sleep(2 * per_step_sleep)
-        eef_pos = nuc.get_robot_state()["ee_pos"]
+
+        # Block until the EE is within settle_threshold_m of the commanded
+        # final pose (or we time out). Replaces a fixed post-horizon sleep
+        # so the policy never sees an observation while the robot is still
+        # catching up to the previous horizon's target. Measured-side frame
+        # must match the target frame: qpos mode commands go through FK so
+        # target is in flange frame (no TCP) — measure via get_fk_ee_pos();
+        # cartesian mode targets are the controller setpoint (O_T_EE / TCP
+        # frame) — measure via get_robot_state()["ee_pos"]. Mixing them
+        # leaks F_T_EE as a constant bias.
+        target_pos = desired_pos_np[-1]
+        measure_pos = (
+            nuc.get_fk_ee_pos
+            if action_type == "qpos"
+            else (lambda: nuc.get_robot_state()["ee_pos"])
+        )
+        settle_start = time.time()
+        settled = False
+        err_m = float("inf")
+        while time.time() - settle_start < settle_timeout_s:
+            err_m = float(np.linalg.norm(measure_pos() - target_pos))
+            if err_m <= settle_threshold_m:
+                settled = True
+                break
+            time.sleep(settle_poll_s)
+        if not settled:
+            settle_elapsed_ms = (time.time() - settle_start) * 1000
+            print(
+                f"[settle] timeout after {settle_elapsed_ms:.0f}ms; "
+                f"pos err {err_m*1000:.2f}mm > {settle_threshold_m*1000:.2f}mm"
+            )
 
     def _loop_runner():
         while not stop_event.is_set():
@@ -224,7 +265,7 @@ def record_episode(cfg, ep_path, nuc, policy):
             nuc.start()
 
             stop_control, control_stop_event, safety_state = start_control_loop(
-                policy, rsi, writer, nuc, cfg.task, cfg.safety
+                policy, rsi, writer, nuc, cfg.task, cfg.safety, cfg.settle
             )
 
             cancel_event = threading.Event()

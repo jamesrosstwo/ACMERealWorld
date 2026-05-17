@@ -247,6 +247,65 @@ class NUCInterface:
         g = gripper.cpu().numpy() if gripper is not None else None
         self.send_control(eef_pos.cpu().numpy(), eef_rot.cpu().numpy(), g)
 
+    def get_fk_ee_pos(self) -> np.ndarray:
+        """FK-frame EE position of the current joint config — i.e. the same
+        frame ``_desired_eef_pos`` lives in when commands come from FK of a
+        commanded qpos. Use this (not ``get_position``) when comparing against
+        a target derived from FK of commanded qpos: ``get_position``'s baked-in
+        TCP offset would otherwise introduce a constant bias that masks the
+        true joint tracking error.
+        """
+        q = self._panda.q.copy()
+        mat = np.array(panda_py.fk(q.reshape(7, 1))).reshape(4, 4)
+        return mat[:3, 3]
+
+    def send_qpos_control(self, qpos: np.ndarray, gripper):
+        """Command a joint configuration. Works for both controllers:
+
+        - joint-space (HybridJointImpedance / JointPosition): qpos is sent
+          straight to the controller; no IK involved.
+        - Cartesian (PolymetisImpedance): FK once to derive the EE pose and
+          dispatch ``set_control(pos, quat)`` — qpos itself is the natural
+          nullspace target but the panda_py 0.7.x PolymetisImpedance binding
+          does not expose ``q_nullspace`` as a kwarg, so the controller's own
+          configured nullspace stiffness handles redundancy.
+        """
+        q = np.asarray(qpos, dtype=np.float64).reshape(7)
+        try:
+            mat = np.array(panda_py.fk(q.reshape(7, 1))).reshape(4, 4)
+            new_pos = mat[:3, 3]
+            new_rot = Rotation.from_matrix(mat[:3, :3]).as_quat()
+            # Quaternion double-cover: q and -q represent the same rotation,
+            # but scipy's canonical choice can flip between consecutive FK
+            # calls on similar joint configs. The Cartesian impedance
+            # controller treats a sign flip as a ~360° rotation request and
+            # spikes the torque. Anchor to the previous setpoint's hemisphere.
+            if np.dot(new_rot, self._desired_eef_rot) < 0:
+                new_rot = -new_rot
+            self._desired_eef_pos = new_pos
+            self._desired_eef_rot = new_rot
+        except (AttributeError, RuntimeError):
+            new_pos = None
+
+        if self._controller:
+            if self._is_joint_space:
+                self._controller.set_control(q)
+            else:
+                if new_pos is None:
+                    raise RuntimeError(
+                        "send_qpos_control: FK failed; cannot dispatch to "
+                        "Cartesian controller without a pose."
+                    )
+                self._controller.set_control(self._desired_eef_pos, self._desired_eef_rot)
+
+        if gripper is not None:
+            g_val = gripper.item() if hasattr(gripper, 'item') else float(gripper)
+            self._gripper.act_async(g_val)
+
+    def send_qpos_control_tensor(self, qpos: torch.Tensor, gripper):
+        g = gripper.cpu().numpy() if gripper is not None else None
+        self.send_qpos_control(qpos.cpu().numpy(), g)
+
     def home_gripper(self):
         """Calibrate the gripper via homing in a background thread."""
         threading.Thread(target=self._gripper._gripper.homing, daemon=True).start()

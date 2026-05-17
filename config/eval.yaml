@@ -4,6 +4,7 @@ defaults:
 
 policy:
   prompt: ${task.instruction}
+  action_type: ${task.action_type}
 
 max_episode_timesteps: 1000
 start_index: 0
@@ -16,6 +17,16 @@ safety:
   enabled: false
   max_linear_velocity: 0.6    # m/s
   max_angular_velocity: 2.0   # rad/s
+
+# After dispatching each policy horizon, block before the next inference
+# until the measured EE position is within `threshold_mm` of the commanded
+# final pose (or `timeout_s` elapses). Replaces a fixed post-horizon sleep
+# so the policy never sees an observation while the robot is still catching
+# up to the previous horizon's target.
+settle:
+  threshold_mm: 3.0
+  timeout_s: 0.1
+  poll_period_s: 0.005
 
 
 
