@@ -12,6 +12,7 @@ import torch
 from omegaconf import DictConfig
 from scipy.spatial.transform import Rotation
 import panda_py
+import panda_py.constants
 
 
 class GripperInterface:
@@ -118,6 +119,17 @@ class NUCInterface:
 
         self._desired_eef_pos = self._panda.get_position()
         self._desired_eef_rot = self._panda.get_orientation(scalar_first=False)
+        # Fixed IK seed for joint-space mode: the joint configuration at the
+        # configured Cartesian home. Computed once via IK seeded with
+        # panda_py.constants.JOINT_POSITION_START (canonical high-manipulability
+        # home) so every send_control IK call lives in the same branch
+        # neighbourhood, eliminating shoulder/elbow jiggle from IK re-solving
+        # against a moving seed.
+        jps = np.asarray(panda_py.constants.JOINT_POSITION_START, dtype=np.float64)
+        self._home_q = np.asarray(
+            panda_py.ik(self._home_pos, self._home_rot, q_init=jps, q_7=float(jps[6])),
+            dtype=np.float64,
+        ).reshape(7)
 
     def get_desired_ee_pose(self):
         return np.concatenate([self._desired_eef_pos, self._desired_eef_rot]).copy()
@@ -214,7 +226,15 @@ class NUCInterface:
         self._desired_eef_rot = eef_rot.copy()
         if self._controller:
             if self._is_joint_space:
-                q_desired = panda_py.ik(eef_pos, eef_rot, q_init=self._panda.q)
+                # Seed IK from a fixed home-pose qpos. Analytical IK is
+                # deterministic — same target + same seed -> same q_desired —
+                # so all calls land in the same branch neighbourhood and
+                # nearby cartesian targets map to nearby q_desired.
+                q_desired = panda_py.ik(
+                    eef_pos, eef_rot,
+                    q_init=self._home_q,
+                    q_7=float(self._home_q[6]),
+                )
                 self._controller.set_control(q_desired)
             else:
                 self._controller.set_control(eef_pos, eef_rot)
@@ -255,7 +275,21 @@ class NUCInterface:
                 Kq=ns_stiffness,
                 Kqd=ns_damping,
             )
+        elif ctrl_type == "joint_impedance":
+            # libfranka JointPosition with panda_py's stock gains. Ignores
+            # the per-task impedance config because those gains are tuned
+            # for the Cartesian controller and don't translate to pure
+            # joint-space impedance.
+            self._is_joint_space = True
+            kq = np.array([[600., 600., 600., 600., 250., 150., 50.]]).T
+            kqd = np.array([[50., 50., 50., 20., 20., 20., 10.]]).T
+            return controllers.JointPosition(
+                stiffness=kq,
+                damping=kqd,
+                filter_coeff=0.002,
+            )
         else:
+            # Cartesian impedance using the per-task impedance gains.
             self._is_joint_space = False
             return controllers.PolymetisImpedance(
                 impedance=impedance,
