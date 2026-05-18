@@ -217,9 +217,16 @@ def start_control_loop(
             time.sleep(settle_poll_s)
         if not settled:
             settle_elapsed_ms = (time.time() - settle_start) * 1000
+            qpos_err = desired_qpos[-1].numpy() - nuc.get_robot_state()["qpos"]
+            qpos_abs = np.abs(qpos_err)
+            qpos_err_mean = float(np.mean(qpos_abs))
+            qpos_err_max = float(np.max(qpos_abs))
+            qpos_str = np.array2string(qpos_err, precision=4, suppress_small=True)
             print(
                 f"[settle] timeout after {settle_elapsed_ms:.0f}ms; "
-                f"pos err {err_m*1000:.2f}mm > {settle_threshold_m*1000:.2f}mm"
+                f"pos err {err_m*1000:.2f}mm > {settle_threshold_m*1000:.2f}mm; "
+                f"|qpos err| mean={qpos_err_mean:.4f} max={qpos_err_max:.4f} rad; "
+                f"per-joint {qpos_str}"
             )
 
     def _loop_runner():

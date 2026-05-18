@@ -2,15 +2,15 @@ defaults:
   - jeju
 
 host: localhost
-port: 52339
+port: 52384
 control_frequency: 0.75
 obs_history: 2
-action_horizon: 24
-action_start_offset: 2
+action_horizon: 16
+action_start_offset: 0
 frame_shape:
   - 3
   - 256
   - 256
 # Match the pre-VLA stretched-bilinear preprocessing the DPs were trained on.
-antialias: false
+antialias: true
 resize_with_pad: false

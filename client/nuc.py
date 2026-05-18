@@ -345,7 +345,7 @@ class NUCInterface:
             return controllers.JointPosition(
                 stiffness=kq,
                 damping=kqd,
-                filter_coeff=0.002,
+                filter_coeff=0.008,
             )
         else:
             # Cartesian impedance using the per-task impedance gains.

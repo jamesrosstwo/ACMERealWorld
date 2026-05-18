@@ -19,7 +19,7 @@ fi
 REMOTE_BASE="/home/james/ACME/data"
 REMOTE_DEST="$REMOTE_BASE/$REMOTE_PATH"
 REMOTE_HOST="james@142.1.46.125"
-SSH_CMD="ssh -p 2233 -i ~/.ssh/id_ed25519 -J james@142.1.44.183:2233"
+SSH_CMD="ssh -p 2233 -i ~/.ssh/id_ed25519"
 
 human() { numfmt --to=iec --suffix=B "$1"; }
 

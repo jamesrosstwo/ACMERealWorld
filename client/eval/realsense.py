@@ -45,13 +45,15 @@ class EvalRealsense:
         def get_obs(self):
             return torch.stack(list(self._cache))
 
-    def __init__(self, n_frames: int, width: int, height: int, fps: int, obs_cams: List[str]):
+    def __init__(self, n_frames: int, width: int, height: int, fps: int, obs_cams: List[str],
+                 laser_power: int = 0):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self._n_frames = n_frames
         self._width = width
         self._height = height
         self._fps = fps
         self._obs_cam_serials = obs_cams
+        self._laser_power = laser_power
         self._counts_lock = threading.Lock()
         self._serials: List[str] = []
         self._serial_to_idx = {}
@@ -101,6 +103,11 @@ class EvalRealsense:
         started = []
         for idx, (pipe, cfg) in enumerate(self._pipelines):
             profile = pipe.start(cfg)
+            # IR projector dot pattern leaks into the color sensor on D4x5,
+            # so match collection's setting exactly — otherwise the policy
+            # sees dotted frames at eval that it never saw during training.
+            depth_sensor = profile.get_device().query_sensors()[0]
+            depth_sensor.set_option(rs.option.laser_power, self._laser_power)
             col_sensor = profile.get_device().query_sensors()[1]
             col_sensor.set_option(rs.option.enable_auto_exposure, 0)
             col_sensor.set_option(rs.option.exposure, 250)

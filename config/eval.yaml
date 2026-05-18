@@ -6,7 +6,7 @@ policy:
   prompt: ${task.instruction}
   action_type: ${task.action_type}
 
-max_episode_timesteps: 1000
+max_episode_timesteps: 1200
 start_index: 0
 
 # Hard caps on commanded motion. If the policy emits a horizon whose implied
@@ -24,8 +24,8 @@ safety:
 # so the policy never sees an observation while the robot is still catching
 # up to the previous horizon's target.
 settle:
-  threshold_mm: 3.0
-  timeout_s: 0.1
+  threshold_mm: 4.0
+  timeout_s: 0.6
   poll_period_s: 0.005
 
 
@@ -49,6 +49,10 @@ realsense:
   width: 1280
   height: 720
   fps: 15
+  # Must match the value used during collection (config/collect.yaml). The D4x5
+  # IR projector pattern bleeds into the color stream, so a mismatch here
+  # introduces a training/eval visual shift.
+  laser_power: 0
   obs_cams:
     # - "148122060186" # high right
 
