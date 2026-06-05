@@ -1,13 +1,22 @@
 defaults:
-  - policy: jeju_dp
-  - task: pusht
+  - policy: borabora
+  - task: rope
 
 policy:
   prompt: ${task.instruction}
   action_type: ${task.action_type}
 
-max_episode_timesteps: 1200
+max_episode_timesteps: 4000
 start_index: 0
+
+# Print each commanded action horizon (pre-safety) to stdout. Useful for
+# debugging policy output when the safety check is rejecting horizons.
+print_action: false
+
+# Save per-camera MP4s + first-frame PNGs of the eval episode under
+# <episode_dir>/dataset_renders/, matching the training dataset_renders layout
+# (output_video_<idx>.mp4, first_frame_<idx>.png with idx in obs_cams order).
+render_eval: true
 
 # Hard caps on commanded motion. If the policy emits a horizon whose implied
 # velocity exceeds either limit, the eval script aborts before the command is
@@ -15,8 +24,8 @@ start_index: 0
 # are sufficient for your setup.
 safety:
   enabled: false
-  max_linear_velocity: 0.6    # m/s
-  max_angular_velocity: 2.0   # rad/s
+  max_linear_velocity: 0.9    # m/s
+  max_angular_velocity: 2.5   # rad/s
 
 # After dispatching each policy horizon, block before the next inference
 # until the measured EE position is within `threshold_mm` of the commanded
@@ -46,6 +55,7 @@ nuc:
 
 realsense:
   n_frames: ${max_episode_timesteps}
+  obs_history: ${policy.obs_history}
   width: 1280
   height: 720
   fps: 15
@@ -54,13 +64,11 @@ realsense:
   # introduces a training/eval visual shift.
   laser_power: 0
   obs_cams:
-    # - "148122060186" # high right
-
+    # - "102122061570" # aug right
+    # - "148122060186" # high rights
     - "932122060415" # high left
     # - "848312071702" # overhead
-    # - "932122060415" # high left
     # - "051222062898" # aug left
-    # - "102122061570" # aug right
     - "217222061106" # wrist cam
 
 hydra:

@@ -335,13 +335,17 @@ class NUCInterface:
                 Kqd=ns_damping,
             )
         elif ctrl_type == "joint_impedance":
-            # libfranka JointPosition with panda_py's stock gains. Ignores
-            # the per-task impedance config because those gains are tuned
-            # for the Cartesian controller and don't translate to pure
-            # joint-space impedance.
+            # libfranka JointPosition. The per-joint gains live under the task's
+            # impedance config (joint_stiffness / joint_damping); these are
+            # distinct from the Cartesian translational/rotational gains, which
+            # don't translate to pure joint-space impedance. Fall back to
+            # panda_py's stock gains when the task doesn't override them.
             self._is_joint_space = True
-            kq = np.array([[600., 600., 600., 600., 250., 150., 50.]]).T
-            kqd = np.array([[50., 50., 50., 20., 20., 20., 10.]]).T
+            imp_cfg = self._server_cfg.impedance
+            kq_list = imp_cfg.get("joint_stiffness", [600., 600., 600., 600., 250., 150., 50.])
+            kqd_list = imp_cfg.get("joint_damping", [50., 50., 50., 20., 20., 20., 10.])
+            kq = np.array([list(kq_list)], dtype=np.float64).T
+            kqd = np.array([list(kqd_list)], dtype=np.float64).T
             return controllers.JointPosition(
                 stiffness=kq,
                 damping=kqd,

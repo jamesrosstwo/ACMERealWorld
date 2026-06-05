@@ -87,6 +87,7 @@ def start_control_loop(
         task_cfg: DictConfig,
         safety_cfg: DictConfig,
         settle_cfg: DictConfig,
+        print_action: bool = False,
 ):
     stop_event = threading.Event()
     safety_state = {"violation": None}
@@ -164,6 +165,13 @@ def start_control_loop(
         # match (e.g. home_rot vs policy output) and produce a spurious violation.
         desired_pos_np = desired_eef_pos.numpy()
         desired_quat_np = desired_eef_quat.numpy()
+
+        if print_action:
+            if action_type == "qpos":
+                print(f"[action] qpos horizon={horizon_len} qpos={desired_qpos.numpy().tolist()} gripper={desired_gripper_force.numpy().tolist()}")
+            else:
+                print(f"[action] eef horizon={horizon_len} pos={desired_pos_np.tolist()} quat={desired_quat_np.tolist()} gripper={desired_gripper_force.numpy().tolist()}")
+
         if safety_enabled:
             if prev_cmd["pos"] is None:
                 anchor_pos = nuc.get_robot_state()["ee_pos"]
@@ -201,6 +209,7 @@ def start_control_loop(
         # frame) — measure via get_robot_state()["ee_pos"]. Mixing them
         # leaks F_T_EE as a constant bias.
         target_pos = desired_pos_np[-1]
+        target_quat = desired_quat_np[-1]
         measure_pos = (
             nuc.get_fk_ee_pos
             if action_type == "qpos"
@@ -209,24 +218,29 @@ def start_control_loop(
         settle_start = time.time()
         settled = False
         err_m = float("inf")
+        last_measured = measure_pos()
         while time.time() - settle_start < settle_timeout_s:
-            err_m = float(np.linalg.norm(measure_pos() - target_pos))
+            last_measured = measure_pos()
+            err_m = float(np.linalg.norm(last_measured - target_pos))
             if err_m <= settle_threshold_m:
                 settled = True
                 break
             time.sleep(settle_poll_s)
         if not settled:
             settle_elapsed_ms = (time.time() - settle_start) * 1000
-            qpos_err = desired_qpos[-1].numpy() - nuc.get_robot_state()["qpos"]
-            qpos_abs = np.abs(qpos_err)
-            qpos_err_mean = float(np.mean(qpos_abs))
-            qpos_err_max = float(np.max(qpos_abs))
-            qpos_str = np.array2string(qpos_err, precision=4, suppress_small=True)
+            per_axis_err_mm = (last_measured - target_pos) * 1000.0
+            per_axis_str = np.array2string(per_axis_err_mm, precision=2, suppress_small=True)
+            measured_quat = nuc.get_robot_state()["ee_rot"]
+            q_t = target_quat / max(float(np.linalg.norm(target_quat)), 1e-12)
+            q_m = measured_quat / max(float(np.linalg.norm(measured_quat)), 1e-12)
+            rot_err_deg = float(np.degrees(
+                2.0 * np.arccos(np.clip(abs(float(np.dot(q_t, q_m))), 0.0, 1.0))
+            ))
             print(
                 f"[settle] timeout after {settle_elapsed_ms:.0f}ms; "
                 f"pos err {err_m*1000:.2f}mm > {settle_threshold_m*1000:.2f}mm; "
-                f"|qpos err| mean={qpos_err_mean:.4f} max={qpos_err_max:.4f} rad; "
-                f"per-joint {qpos_str}"
+                f"per-axis (mm) {per_axis_str}; "
+                f"rot err {rot_err_deg:.2f}deg"
             )
 
     def _loop_runner():
@@ -256,8 +270,12 @@ def record_episode(cfg, ep_path, nuc, policy):
                 plotter = None
             nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
 
+            if bool(cfg.get("render_eval", False)):
+                writer.register_cameras(rsi.serials, fps=cfg.realsense.fps)
+
             primary_serial = rsi.serials[0]
-            def on_receive_frame(serial):
+            def on_receive_frame(serial, frame):
+                writer.on_frame(serial, frame)
                 if serial == primary_serial:
                     c_state = nuc.get_robot_state()
                     c_state.update(dict(
@@ -272,7 +290,8 @@ def record_episode(cfg, ep_path, nuc, policy):
             nuc.start()
 
             stop_control, control_stop_event, safety_state = start_control_loop(
-                policy, rsi, writer, nuc, cfg.task, cfg.safety, cfg.settle
+                policy, rsi, writer, nuc, cfg.task, cfg.safety, cfg.settle,
+                print_action=bool(cfg.get("print_action", False)),
             )
 
             cancel_event = threading.Event()

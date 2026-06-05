@@ -7,7 +7,9 @@ and serialization of observation tensors for network transfer.
 """
 import io
 import logging
+from pathlib import Path
 
+import cv2
 import requests
 import torch
 import torch.nn.functional as F
@@ -36,7 +38,8 @@ class EvalPolicyInterface:
                  host: str = "localhost",
                  prompt: str = "",
                  antialias: bool = True,
-                 resize_with_pad: bool = True):
+                 resize_with_pad: bool = True,
+                 dump_frames_dir: str = ""):
         if action_type not in ("qpos", "cartesian"):
             raise ValueError(f"action_type must be 'qpos' or 'cartesian', got {action_type!r}")
         self._control_frequency = control_frequency
@@ -54,6 +57,15 @@ class EvalPolicyInterface:
         self._prompt = prompt
         self._antialias = antialias
         self._resize_with_pad = resize_with_pad
+        # Frame-tracking diagnostics. When dump_frames_dir is set, every frame
+        # actually sent to the server is written to disk as a PNG. The geometry
+        # (padding / letterboxing) is logged once on the first preprocessed
+        # frame regardless, so each run records what it sent.
+        self._dump_frames_dir = Path(dump_frames_dir) if dump_frames_dir else None
+        if self._dump_frames_dir is not None:
+            self._dump_frames_dir.mkdir(parents=True, exist_ok=True)
+        self._dump_idx = 0
+        self._logged_geom = False
 
     @property
     def obs_history_size(self):
@@ -110,14 +122,51 @@ class EvalPolicyInterface:
                 pad_left = max(0, (tw - rw) // 2)
                 padded[:, :, pad_top:pad_top + rh, pad_left:pad_left + rw] = resized
                 frame = padded
+                if not self._logged_geom:
+                    bars = "top/bottom" if pad_top > 0 else ("left/right" if pad_left > 0 else "none")
+                    print(f"[frame-geom] resize_with_pad=True src={h}x{w} -> "
+                          f"resized={rh}x{rw} -> canvas={th}x{tw}; "
+                          f"pad_top={pad_top}px pad_left={pad_left}px "
+                          f"({'LETTERBOXED ' + bars if (pad_top or pad_left) else 'no padding'})")
+                    self._logged_geom = True
             else:
                 frame = F.interpolate(frame, size=(th, tw), mode='bilinear',
                                       align_corners=False, antialias=self._antialias)
+                if not self._logged_geom:
+                    print(f"[frame-geom] resize_with_pad=False src={h}x{w} -> "
+                          f"stretched to {th}x{tw} (aspect not preserved, no padding)")
+                    self._logged_geom = True
+        elif not self._logged_geom:
+            print(f"[frame-geom] src already {th}x{tw}; no resize, no padding")
+            self._logged_geom = True
 
         # Convert back to uint8
         frame = (frame * 255.0).clamp(0, 255).to(torch.uint8)
 
         return frame
+
+    def _dump_sent_frames(self, rgb_data):
+        """Write the exact frames being sent to the server to disk as PNGs.
+
+        Each value is the post-preprocess tensor (uint8, RGB) of shape
+        (1, obs_steps, C, H, W) — i.e. literally what gets serialized into the
+        request. Files are named ``<call>_<rgb_key>_t<step>.png`` so you can
+        diff successive inference calls and confirm padding/letterboxing
+        visually (black bars survive the round-trip to disk).
+        """
+        for rgb_key, frames in rgb_data.items():
+            arr = frames.detach().cpu()
+            if arr.dtype != torch.uint8:
+                arr = arr.clamp(0, 255).to(torch.uint8)
+            arr = arr.numpy()
+            # (1, T, C, H, W) -> iterate over T
+            batch = arr[0]
+            for t in range(batch.shape[0]):
+                rgb = batch[t].transpose(1, 2, 0)  # CHW -> HWC, RGB
+                bgr = rgb[..., ::-1]               # RGB -> BGR for cv2
+                fname = self._dump_frames_dir / f"{self._dump_idx:05d}_{rgb_key}_t{t}.png"
+                cv2.imwrite(str(fname), bgr)
+        self._dump_idx += 1
 
     @staticmethod
     def _fk_horizon(qpos_horizon: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -152,6 +201,9 @@ class EvalPolicyInterface:
         files = dict()
         # Add RGB frames as binary data
         rgb_data = {"rgb_0": rgb_0, "rgb_1": rgb_1}
+
+        if self._dump_frames_dir is not None:
+            self._dump_sent_frames(rgb_data)
 
         for rgb_key, frames in rgb_data.items():
             buffer = io.BytesIO()

@@ -6,7 +6,8 @@ comparing end-effector positions against commanded actions.
 """
 import threading
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
+import cv2
 import numpy as np
 import plotly.graph_objects as go
 import torch
@@ -162,6 +163,48 @@ class EvalWriter:
         self.inferences = []
         self._state_keys = ["qpos", "ee_pos", "ee_rot", "gripper_force", "action"]
         self._inference_keys = ["ee_pos", "ee_quat", "gripper_force", "desired_ee_pos", "desired_ee_quat", "desired_gripper_force", "desired_qpos"]
+        self._serial_to_idx: Dict[str, int] = {}
+        self._video_writers: Dict[str, cv2.VideoWriter] = {}
+        self._first_frames: Dict[str, np.ndarray] = {}
+        self._render_fps: Optional[float] = None
+        self._renders_dir: Optional[Path] = None
+
+    def register_cameras(self, serials: List[str], fps: float) -> None:
+        """Enable per-camera MP4 recording. Videos and first-frame PNGs are
+        written under <episode_path>/dataset_renders/ with indices matching
+        the order of ``serials`` (output_video_<idx>.mp4 / first_frame_<idx>.png).
+        Writers are created lazily on the first frame per serial so we know the
+        actual frame shape.
+        """
+        self._serial_to_idx = {s: i for i, s in enumerate(serials)}
+        self._render_fps = float(fps)
+        self._renders_dir = self.path / "dataset_renders"
+        self._renders_dir.mkdir(parents=True, exist_ok=True)
+
+    def on_frame(self, serial: str, frame_bgr: np.ndarray) -> None:
+        """Append a raw BGR frame from camera ``serial`` to its MP4 stream.
+        No-op if ``register_cameras`` was never called (rendering disabled).
+        Called from the realsense grabber thread — each serial has its own
+        thread, so per-writer access is single-threaded and lock-free.
+        """
+        if self._renders_dir is None:
+            return
+        idx = self._serial_to_idx.get(serial)
+        if idx is None:
+            return
+        writer = self._video_writers.get(serial)
+        if writer is None:
+            h, w = frame_bgr.shape[:2]
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            path = str(self._renders_dir / f"output_video_{idx}.mp4")
+            writer = cv2.VideoWriter(path, fourcc, self._render_fps, (w, h))
+            if not writer.isOpened():
+                print(f"[writer] failed to open VideoWriter for {path}; disabling render for {serial}")
+                self._serial_to_idx.pop(serial, None)
+                return
+            self._video_writers[serial] = writer
+            self._first_frames[serial] = frame_bgr.copy()
+        writer.write(frame_bgr)
 
     def get_states_snapshot(self):
         with self._states_lock:
@@ -224,5 +267,19 @@ class EvalWriter:
                 inference_fig(stacked_infs).write_html(self.path / "inference.html")
             except Exception as e:
                 print(f"[writer] inference.html render failed: {e}")
+
+        for serial, writer in self._video_writers.items():
+            try:
+                writer.release()
+            except Exception as e:
+                print(f"[writer] failed to release video writer for {serial}: {e}")
+        for serial, frame in self._first_frames.items():
+            idx = self._serial_to_idx.get(serial)
+            if idx is None:
+                continue
+            try:
+                cv2.imwrite(str(self._renders_dir / f"first_frame_{idx}.png"), frame)
+            except Exception as e:
+                print(f"[writer] failed to write first_frame_{idx}.png: {e}")
 
 

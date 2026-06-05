@@ -2,8 +2,8 @@ defaults:
   - jeju
 
 host: 142.1.46.125
-port: 53568
-control_frequency: 0.5
+port: 53962
+control_frequency: 1
 obs_history: 1
 action_horizon: 15
 action_start_offset: 2

@@ -2,10 +2,10 @@ defaults:
   - jeju
 
 host: localhost
-port: 52384
+port: 52270
 control_frequency: 0.75
-obs_history: 2
-action_horizon: 16
+obs_history: 1
+action_horizon: 24
 action_start_offset: 0
 frame_shape:
   - 3

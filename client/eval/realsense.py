@@ -20,7 +20,7 @@ from client.utils import enumerate_devices
 
 class EvalRealsense:
     class _FrameGrabberThread(threading.Thread):
-        def __init__(self, serial, pipe, callback, stop_event, cache_size=2):
+        def __init__(self, serial, pipe, callback, stop_event, cache_size):
             super().__init__()
             self.serial = serial
             self.pipe = pipe
@@ -33,9 +33,10 @@ class EvalRealsense:
                 try:
                     fs = self.pipe.wait_for_frames(timeout_ms=5000)
                     color_frame = fs.get_color_frame()
-                    color = torch.tensor(np.asanyarray(color_frame.get_data()))
+                    color_np = np.asanyarray(color_frame.get_data())
+                    color = torch.tensor(color_np)
                     self._cache.append(color)
-                    self.callback(self.serial)
+                    self.callback(self.serial, color_np)
                 except Exception as e:
                     print(f"Camera {self.serial} failed to grab frame: {e}")
                     traceback.print_exc()
@@ -46,13 +47,14 @@ class EvalRealsense:
             return torch.stack(list(self._cache))
 
     def __init__(self, n_frames: int, width: int, height: int, fps: int, obs_cams: List[str],
-                 laser_power: int = 0):
+                 obs_history: int, laser_power: int = 0):
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self._n_frames = n_frames
         self._width = width
         self._height = height
         self._fps = fps
         self._obs_cam_serials = obs_cams
+        self._obs_history = obs_history
         self._laser_power = laser_power
         self._counts_lock = threading.Lock()
         self._serials: List[str] = []
@@ -90,9 +92,9 @@ class EvalRealsense:
         return pipelines
 
     def start_capture(self, on_receive_frame: Callable = None, on_warmup: Callable = None):
-        def _callback_wrapper(serial):
+        def _callback_wrapper(serial, frame):
             if on_receive_frame is not None:
-                on_receive_frame(serial)
+                on_receive_frame(serial, frame)
             with self._counts_lock:
                 self.frame_counts[serial] += 1
                 if self.frame_counts[serial] >= self._n_frames:
@@ -128,7 +130,8 @@ class EvalRealsense:
         for idx, pipe in enumerate(started):
             serial = self._serials[idx]
             stop_event = threading.Event()
-            t = self._FrameGrabberThread(serial, pipe, _callback_wrapper, stop_event)
+            t = self._FrameGrabberThread(serial, pipe, _callback_wrapper, stop_event,
+                                         cache_size=self._obs_history)
             t.start()
             self._threads.append(t)
             self._stop_events.append(stop_event)
