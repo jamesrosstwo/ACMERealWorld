@@ -240,6 +240,28 @@ class ACMEWriter:
             )
             global_synced.append((cap, synced_rgb, synced_ir_left, synced_ir_right, synced_ts))
 
+        # Tier-1 sync safety net: every camera was nearest-neighbor aligned to
+        # ref_ts, so |synced_ts - ref_ts| is the residual temporal error. On a
+        # shared clock (RealSense global time + ZED IMAGE epoch, both Unix-epoch
+        # ms) this is a few ms; a large median means the backends are on
+        # different clocks/epochs and the data is silently misaligned -- fail
+        # loud rather than poison training.
+        sync_diag = {}
+        for cap, _rgb, _irl, _irr, synced_ts in global_synced:
+            serial = cap._path.name.replace("capture_", "")
+            deltas = np.abs(np.asarray(synced_ts, dtype=np.float64) - ref_ts)
+            median_ms = float(np.median(deltas)) if deltas.size else 0.0
+            max_ms = float(np.max(deltas)) if deltas.size else 0.0
+            sync_diag[serial] = dict(median_ms=median_ms, max_ms=max_ms)
+            half_frame_ms = 0.5 * (1000.0 / cap._fps)
+            if median_ms > half_frame_ms:
+                raise RuntimeError(
+                    f"Camera {serial} sync residual median {median_ms:.1f}ms exceeds "
+                    f"{half_frame_ms:.1f}ms (half a frame at {cap._fps}fps). Cameras are "
+                    f"likely on different clocks/epochs; check RealSense global_time and "
+                    f"the ZED IMAGE timestamp epoch."
+                )
+
         for cap, rgb_frames, ir_left_frames, ir_right_frames, synced_timestamps in global_synced:
             # ir left
             zarr.array(np.array(ir_left_frames, dtype=np.uint8),
@@ -266,7 +288,10 @@ class ACMEWriter:
                 np.savez(f, np.asarray(synced_timestamps))
 
         synced_store = zarr.DirectoryStore(str(self.path / "episode.zarr"))
-        synced_root = zarr.group(store=synced_store)
+        # overwrite=True so re-running postprocess on an episode is idempotent
+        # (matches _persist_raw_state); otherwise create_dataset below raises
+        # ContainsArrayError against a pre-existing episode.zarr.
+        synced_root = zarr.group(store=synced_store, overwrite=True)
         # Prefer the in-memory buffer (live-collection path); fall back to
         # raw_episode.zarr on disk (postprocess path, where this writer is
         # freshly constructed and the buffer is empty).
@@ -285,7 +310,8 @@ class ACMEWriter:
         metadata = dict(
             n_timesteps=sync_len,
             instruction=self.instruction,
-            dynamic_captures=[217222061106]
+            dynamic_captures=[217222061106],
+            camera_sync_ms=sync_diag,
         )
         with open(self.episode_path / "metadata.yaml", "w") as f:
             yaml.dump(metadata, f)

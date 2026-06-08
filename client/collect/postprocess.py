@@ -37,15 +37,29 @@ def gather_data(episodes_path: str, n_frames: int, writer_cfg: DictConfig, reals
                 pass
             bagpaths = sorted(Path(ep_path).glob("*.bag"))
             bagpaths = [p for p in bagpaths if not p.stem.endswith(".orig")]
-            serials = [p.stem for p in bagpaths]
+            svopaths = sorted(Path(ep_path).glob("*.svo2"))
+            serials = [p.stem for p in bagpaths] + [p.stem for p in svopaths]
             writer = ACMEWriter(ep_path, serials=serials, **writer_cfg)
+            print(f"found {len(bagpaths)} bags + {len(svopaths)} svo: {serials}")
+
             rs_interface = RSBagProcessor(bagpaths, **realsense)
-            print(f"found {len(bagpaths)} bags: {serials}")
             for color, color_tmstmp, ir_left, ir_right, serial in tqdm(rs_interface.process_all_frames()):
                 try:
                     writer.write_capture_frame(serial, color_tmstmp, color, ir_left, ir_right)
                 except IndexError:
                     continue
+
+            # ZED wrist captures are decoded the same way. Imported lazily so
+            # RealSense-only episodes don't require pyzed/the ZED SDK installed.
+            if svopaths:
+                from client.collect.zed import ZEDSvoProcessor
+                zed_interface = ZEDSvoProcessor(svopaths)
+                for color, color_tmstmp, ir_left, ir_right, serial in tqdm(zed_interface.process_all_frames()):
+                    try:
+                        writer.write_capture_frame(serial, color_tmstmp, color, ir_left, ir_right)
+                    except IndexError:
+                        continue
+
             writer.flush()
             completion_marker.touch()
         except RuntimeError as e:

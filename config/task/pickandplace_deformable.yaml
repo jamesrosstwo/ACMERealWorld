@@ -3,6 +3,7 @@ instruction: "Pick up the stuffed animal and place it in the box. Control mode: 
 
 home_pos: [0.30582778, 0., 0.48467681]
 home_rot: [1., 0., 0., 0.]
+home_q: [0.002532, -0.542530, -0.002353, -2.448671, -0.000952, 1.903067, 0.010804]
 
 pos_mask: [true, true, true]
 
@@ -13,13 +14,13 @@ open_gripper_on_reset: true
 gripper_hysteresis: 0.1  # Dead zone: grasp if > 0.5+h, open if < 0.5-h
 gripper_logging: false
 
-controller: joint_impedance
-action_type: qpos
+# controller: joint_impedance
+# action_type: qpos
 
-# controller: cartesian
-# action_type: cartesian
+controller: cartesian
+action_type: cartesian
 
-max_episode_timesteps: 1200
+max_episode_timesteps: 300
 
 impedance:
   # Original panda_py CartesianImpedance defaults, converted to explici0t gains.

@@ -6,6 +6,13 @@ instruction: ""
 home_pos: [0.30582778, 0., 0.48167681]
 home_rot: [1., 0., 0., 0.]
 
+# Optional joint-space home: a list of 7 joint angles (radians). When set, the
+# arm resets to this exact joint configuration and home_pos/home_rot above are
+# overridden by its forward kinematics (so frozen Cartesian dims and the
+# impedance setpoint stay consistent with the posture). Leave null (default) to
+# use the Cartesian home_pos/home_rot directly.
+home_q: null
+
 pos_mask: [true, true, true]
 
 freeze_rotation: false

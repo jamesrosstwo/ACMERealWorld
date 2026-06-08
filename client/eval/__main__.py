@@ -24,7 +24,7 @@ import torch
 import yaml
 from omegaconf import DictConfig, OmegaConf
 
-from client.eval.realsense import EvalRealsense
+from client.eval.cameras import EvalCameras
 from client.eval.writer import EvalWriter
 from client.eval.policy import EvalPolicyInterface
 from client.eval.live_plotter import LiveControlErrorPlotter
@@ -81,7 +81,7 @@ def listen_for_keypress(cancel_event):
 
 def start_control_loop(
         policy: EvalPolicyInterface,
-        realsense: EvalRealsense,
+        realsense: EvalCameras,
         writer: EvalWriter,
         nuc: NUCInterface,
         task_cfg: DictConfig,
@@ -261,7 +261,7 @@ def record_episode(cfg, ep_path, nuc, policy):
     writer = None
     safety_state = {"violation": None}
     try:
-        with EvalRealsense(**cfg.realsense) as rsi:
+        with EvalCameras(**cfg.cameras) as rsi:
             writer = EvalWriter(path=ep_path, **cfg.writer)
             try:
                 plotter = LiveControlErrorPlotter()
@@ -271,7 +271,7 @@ def record_episode(cfg, ep_path, nuc, policy):
             nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
 
             if bool(cfg.get("render_eval", False)):
-                writer.register_cameras(rsi.serials, fps=cfg.realsense.fps)
+                writer.register_cameras(rsi.serials, fps=cfg.cameras.fps)
 
             primary_serial = rsi.serials[0]
             def on_receive_frame(serial, frame):

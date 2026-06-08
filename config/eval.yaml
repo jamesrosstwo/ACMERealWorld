@@ -47,13 +47,30 @@ nuc:
   franka_ip: "192.168.1.107"
   home_pos: ${task.home_pos}
   home_rot: ${task.home_rot}
+  home_q: ${task.home_q}
   server:
     controller: ${task.controller}
     gripper_hysteresis: ${task.gripper_hysteresis}
     gripper_logging: ${task.gripper_logging}
     impedance: ${task.impedance}
+    # Gripper backend. "robotiq" drives a Robotiq 2F-85 over USB->RS485 (Modbus
+    # RTU) on the control PC, independent of the Franka. "panda" uses the Franka
+    # Panda Hand through the control box at franka_ip. The franka_ip above is
+    # ignored by the robotiq backend.
+    gripper:
+      type: robotiq          # "robotiq" or "panda"
+      # Prefer a stable /dev/serial/by-id/... symlink so the USB->RS485 FTDI
+      # can't get swapped with the GELLO FTDI; "auto" probes for any Robotiq.
+      port: "auto"
+      device_id: 9           # Robotiq Modbus slave id (default 9)
+      speed: 255             # 0-255
+      force: 100             # 0-255 — start gentle, tune up
+      max_width_m: 0.085     # 2F-85 stroke (m), used for obs scaling
 
-realsense:
+# Mixed-backend eval camera set (consumed by client.eval.cameras.EvalCameras).
+# RealSense everywhere, ZED (droid-style) for the wrist. Shared width/height/fps
+# apply to both backends; laser_power is RealSense-only (ignored by ZED).
+cameras:
   n_frames: ${max_episode_timesteps}
   obs_history: ${policy.obs_history}
   width: 1280
@@ -63,13 +80,20 @@ realsense:
   # IR projector pattern bleeds into the color stream, so a mismatch here
   # introduces a training/eval visual shift.
   laser_power: 0
+  # Order here is positional: entry 0 -> rgb_0 / output_video_0, entry 1 ->
+  # rgb_1 / output_video_1, etc. A bare string is a RealSense serial; a mapping
+  # selects the backend explicitly. `serial` is just a stable label/key for a
+  # ZED (not its hardware serial) — set `zed_serial` to pin a specific ZED when
+  # more than one is connected.
   obs_cams:
     # - "102122061570" # aug right
     # - "148122060186" # high rights
-    - "932122060415" # high left
+    # - "932122060415" # high left
     # - "848312071702" # overhead
-    # - "051222062898" # aug left
-    - "217222061106" # wrist cam
+    - "051222062898" # aug left
+    - serial: "wrist_zed"   # wrist cam — ZED Mini (droid-style), left view
+      backend: zed
+      zed_serial: null       # set to the ZED hardware serial (int) if needed
 
 hydra:
   output_subdir: null

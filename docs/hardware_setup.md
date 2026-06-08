@@ -137,3 +137,123 @@ Ensure your user has serial port access:
 sudo usermod -aG dialout $USER
 # Log out and back in for the group change to take effect
 ```
+
+---
+
+## Robotiq 2F-85 gripper
+
+The Robotiq 2F-85 replaces the Franka Panda Hand. Unlike the Panda Hand (which is
+driven through the Franka control box over libfranka), the Robotiq is a third-party
+gripper that talks **Modbus RTU over RS-485** directly to the control PC. `panda_py`
+keeps the arm; the [`RobotiqGripper`](../client/nuc.py) backend owns the gripper on the
+same PC — **no NUC is involved in gripper control**. Select it with
+`gripper.type: robotiq` under `nuc.server` in `config/eval.yaml` / `config/collect.yaml`.
+
+### Wiring
+
+```
+2F-85 ── coupling ── 24 V supply
+                  └── RS-485 pigtail ── ACC-ADT-USB-RS485 ── PC USB
+```
+
+- Power the gripper coupling from a **24 V** supply (the Robotiq does **not** draw power
+  from the Franka).
+- Connect the RS-485 pigtail to the `ACC-ADT-USB-RS485` converter that ships with the
+  gripper, then to a PC USB port. Confirm it enumerates: `ls -l /dev/ttyUSB*`.
+
+### Serial permissions and a stable port
+
+The converter is an FTDI device, like GELLO — so give your user serial access
+(`sudo usermod -aG dialout $USER`, then re-login) and prefer a stable
+`/dev/serial/by-id/...` symlink over `/dev/ttyUSB*` so it can't get swapped with the
+GELLO FTDI:
+
+```bash
+ls -l /dev/serial/by-id/   # find the Robotiq FTDI symlink
+```
+
+Put that path in `gripper.port` (instead of `"auto"`) in the eval/collect configs.
+
+### Franka Desk end-effector configuration (important)
+
+With the Panda Hand removed, configure the new end-effector in Franka Desk, otherwise the
+impedance controller's gravity compensation will be wrong (the arm sags/drifts):
+
+1. Remove the "Franka Hand" end-effector.
+2. Set the **end-effector mass / centre-of-mass / inertia** for the 2F-85 + coupling
+   (~0.9 kg).
+3. Set the **TCP transform** (`NE_T_EE` / `F_T_EE`) to the new fingertip.
+
+Because `panda_py.get_position()` returns the TCP-inclusive EE pose, the new TCP shifts
+the reported pose — re-check `task.home_pos` / `home_rot` after setting the Desk TCP
+(cartesian mode is TCP-frame; qpos mode FKs in flange frame).
+
+### Driver and quick test
+
+The driver is [`pyRobotiqGripper`](https://github.com/castetsb/pyRobotiqGripper), installed
+via `environment.yaml`. Bench-test the gripper on its own (arm idle) with:
+
+```bash
+python -m scripts.test_robotiq            # auto-detect port
+python -m scripts.test_robotiq --port /dev/serial/by-id/usb-FTDI...-if00-port0
+```
+
+It activates/calibrates the gripper, opens and closes it, and prints the `gripper_force`
+observation (≈0.0 open, ≈1.0 closed) so you can confirm serial, activation, and the obs
+mapping before running the full collect/eval loops.
+
+### Caveats
+
+- **Obs distribution shift**: a policy trained on Panda-Hand `gripper_force` will see the
+  Robotiq's value. The convention (0=open, 1=closed) matches and the hysteresis dispatch
+  makes the *command* binary, but the continuous obs trace won't be identical — expect to
+  recollect data / re-tune for best results. `task.zero_gripper_obs: true` is an escape
+  hatch.
+- The default Robotiq Modbus slave id is `9` (`gripper.device_id`); change it only if a
+  non-default was set on the gripper.
+
+---
+
+## Wrist ZED camera (data collection)
+
+The wrist camera is a ZED Mini. Eval already streams it ([client/eval/zed.py](../client/eval/zed.py));
+collection records it too via [client/collect/zed.py](../client/collect/zed.py).
+
+### How it fits the pipeline
+
+Collection is two-phase, and the ZED mirrors the RealSense flow:
+
+| Phase | RealSense | ZED |
+|-------|-----------|-----|
+| Live (`client.collect`) | records `<serial>.bag` | records `<serial>.svo2` |
+| Offline (`client.collect.postprocess`) | `RSBagProcessor` decodes the bag | `ZEDSvoProcessor` decodes the svo2 |
+
+Both decoders emit the same `(color, ts, ir_left, ir_right, serial)` tuple, so
+`ACMEWriter` and the dataset format are unchanged. The ZED is stored as **full stereo**:
+`rgb.mp4` = rectified LEFT, `ir_left/ir_right.zarr` = the rectified LEFT/RIGHT grayscale pair,
+and a `calibration.yaml` (ZED intrinsics + baseline) so `scripts/foundation_stereo.py` can
+produce wrist depth later.
+
+Declare it in [config/collect.yaml](../config/collect.yaml) under `zed_cameras`, keeping the
+`serial` label and ordering aligned with `eval.yaml`'s `obs_cams` so the `rgb_<i>` wrist slot
+matches between collection and eval.
+
+### Timestamp synchronization (Tier-1)
+
+All streams are put on one host-referenced Unix-epoch clock (milliseconds):
+
+- RealSense: collection **enables and asserts** the global-time domain
+  ([client/collect/realsense.py](../client/collect/realsense.py)); if a camera isn't on the
+  global-time domain, collection aborts rather than silently misalign.
+- ZED: the SVO's `TIME_REFERENCE.IMAGE` timestamps are already epoch ms.
+- Postprocess asserts the per-camera sync residual median is under half a frame and records it
+  in `metadata.yaml` (`camera_sync_ms`) — a loud failure beats silent misalignment.
+
+### Requirements (collection PC **and** postprocess box)
+
+- ZED SDK + matching `pyzed` (see [environment.yaml](../environment.yaml); not a clean PyPI
+  package — install via the SDK or the repo's `pyzed-4.2-...whl`).
+- An **NVIDIA GPU + compatible driver** — the ZED SDK initializes CUDA even for SVO playback,
+  so a CPU-only postprocess box won't work.
+- The `.svo2` files must sit alongside the `.bag` files in each episode dir (relevant if
+  postprocess runs on a different machine than collection).

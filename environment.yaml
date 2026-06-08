@@ -19,6 +19,16 @@ dependencies:
       - pyrealsense2
       - panda-python @ git+https://github.com/jamesrosstwo/panda-py.git@polymetis-impedance
       - torch
+      # Robotiq 2F-85 driver (Modbus RTU over USB->RS485). Pulls pymodbus +
+      # pyserial. Only needed when config sets gripper.type: robotiq.
+      - pyRobotiqGripper~=3.2.3
       # FoundationStereo (stereo depth estimation) — install separately:
       #   see docs/foundation_stereo.md
+      # ZED wrist camera (collection + eval): pyzed is coupled to the installed
+      # ZED SDK, so install it separately, not from PyPI, and match the SDK
+      # version. This setup runs ZED SDK 5.0.x, so install pyzed via the SDK's
+      # `python /usr/local/zed/get_python_api.py` (the pyzed-4.2 wheel in the repo
+      # root is stale and won't import against SDK 5.0). Required on both the
+      # collection PC and the postprocess box (the SDK needs an NVIDIA GPU +
+      # compatible driver even for SVO playback).
 

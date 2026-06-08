@@ -3,6 +3,7 @@ instruction: "Move the rope into the red outline"
 
 home_pos: [0.45, 0., 0.20]
 home_rot: [1., 0., 0., 0.]
+home_q: null  # Optional 7-joint home; see config/task/default.yaml.
 
 pos_mask: [true, true, true]
 

@@ -18,18 +18,22 @@ def enumerate_devices() -> List[Tuple[str, str]]:
     return devs
 
 
-def validate_episode(ep_path: Path, expected_n_bags: int = EXPECTED_N_BAGS) -> Tuple[bool, List[str]]:
+def validate_episode(ep_path: Path, expected_n_bags: int = EXPECTED_N_BAGS,
+                     expected_n_svo: int = 0) -> Tuple[bool, List[str]]:
     """Verify an episode directory contains the expected raw collection artifacts.
 
     Returns ``(ok, errors)`` where ``errors`` is a list of human-readable
-    descriptions of every problem found. An episode is valid when it has
-    exactly ``expected_n_bags`` ``*.bag`` files (excluding ``*.orig.bag``)
-    and a ``raw_episode.zarr`` directory.
+    descriptions of every problem found. An episode is valid when it has exactly
+    ``expected_n_bags`` RealSense ``*.bag`` files (excluding ``*.orig.bag``),
+    ``expected_n_svo`` ZED ``*.svo2`` files, and a ``raw_episode.zarr`` directory.
     """
     errors: List[str] = []
     bags = [p for p in ep_path.glob("*.bag") if not p.stem.endswith(".orig")]
     if len(bags) != expected_n_bags:
         errors.append(f"expected {expected_n_bags} bags, found {len(bags)}")
+    svos = list(ep_path.glob("*.svo2"))
+    if len(svos) != expected_n_svo:
+        errors.append(f"expected {expected_n_svo} svo2, found {len(svos)}")
     if not (ep_path / "raw_episode.zarr").is_dir():
         errors.append("missing raw_episode.zarr")
     return (len(errors) == 0, errors)

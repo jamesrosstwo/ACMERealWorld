@@ -3,6 +3,11 @@
 Communicates with a Franka Panda robot arm via panda-py (libfranka).
 Provides end-effector Cartesian impedance control, forward kinematics, gripper
 commands, and robot state queries (joint positions, EE pose).
+
+The gripper is pluggable (see :func:`make_gripper`): the Franka Panda Hand
+(:class:`PandaGripper`, through the control box) or a Robotiq 2F-85
+(:class:`RobotiqGripper`, over USB->RS485 Modbus RTU on the control PC,
+independent of the Franka). Selected via ``server.gripper.type`` in config.
 """
 import threading
 import time
@@ -15,53 +20,54 @@ import panda_py
 import panda_py.constants
 
 
-class GripperInterface:
-    def __init__(self, ip_address: str, hysteresis: float, logging: bool = True):
-        self._logging = logging
-        self._log(f"Initializing GripperInterface via panda-py at {ip_address}")
-        self._gripper = panda_py.libfranka.Gripper(ip_address)
+class GripperState:
+    def __init__(self, width: float, max_width: float, is_grasped: bool):
+        self.width = width
+        self.max_width = max_width
+        self.is_grasped = is_grasped
 
+
+class BaseGripper:
+    """Backend-agnostic gripper interface.
+
+    The threshold + hysteresis dispatch in :meth:`act_async` and the async
+    bookkeeping are identical across grippers and live here. A backend talks to
+    its specific hardware by implementing :meth:`get_state`, :meth:`_do_grasp`,
+    :meth:`_do_open`, and (optionally) :meth:`home` / :meth:`stop`.
+    """
+
+    def __init__(self, hysteresis: float, logging: bool = True):
+        self._logging = logging
+        self._hysteresis = hysteresis
         # Async state
         self._thread = None
         self._target_grasp_state = False  # False=Open, True=Grasped
-        self._hysteresis = hysteresis
 
     def _log(self, msg: str):
         if self._logging:
             print(f"\t[gripper] {msg}")
 
-    def get_state(self):
-        state = self._gripper.read_once()
-        return GripperState(
-            width=state.width,
-            max_width=state.max_width,
-            is_grasped=state.is_grasped
-        )
+    # --- backend contract ------------------------------------------------
+    def get_state(self) -> "GripperState":
+        raise NotImplementedError
 
-    def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = False):
-        self._gripper.move(width=width, speed=speed)
+    def _do_grasp(self):
+        raise NotImplementedError
 
-    def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = False):
-        try:
-            return self._gripper.grasp(width=grasp_width, speed=speed, force=force, epsilon_outer=0.04)
-        except RuntimeError:
-            return False
+    def _do_open(self):
+        raise NotImplementedError
+
+    def home(self):
+        """Calibrate / home the gripper (backend specific; no-op by default)."""
+        pass
 
     def stop(self):
-        self._gripper.stop()
+        pass
 
     def close(self):
         pass
 
-    def _do_grasp(self):
-        result = self.grasp(speed=0.1, force=10.0, blocking=False)
-        self._log(f"grasp result: {result}")
-
-    def _do_open(self):
-        mx = self.get_state().max_width
-        self._log(f"opening to max_width={mx}")
-        self.goto(width=mx, speed=0.1, blocking=False)
-
+    # --- shared async dispatch -------------------------------------------
     def act_async(self, gripper_val: float):
         val = float(gripper_val)
         self._log(f"val={val:.3f}")
@@ -86,11 +92,150 @@ class GripperInterface:
             pass
 
 
-class GripperState:
-    def __init__(self, width: float, max_width: float, is_grasped: bool):
-        self.width = width
-        self.max_width = max_width
-        self.is_grasped = is_grasped
+class PandaGripper(BaseGripper):
+    """Franka Panda Hand via panda-py (libfranka), routed through the Franka
+    control box at ``ip_address``. Requires the Panda Hand to be physically
+    attached and configured as the end-effector in Franka Desk.
+    """
+
+    def __init__(self, ip_address: str, hysteresis: float, logging: bool = True):
+        super().__init__(hysteresis=hysteresis, logging=logging)
+        self._log(f"Initializing PandaGripper via panda-py at {ip_address}")
+        self._gripper = panda_py.libfranka.Gripper(ip_address)
+
+    def get_state(self):
+        state = self._gripper.read_once()
+        return GripperState(
+            width=state.width,
+            max_width=state.max_width,
+            is_grasped=state.is_grasped
+        )
+
+    def goto(self, width: float, speed: float = 0.1, force: float = 10.0, blocking: bool = False):
+        self._gripper.move(width=width, speed=speed)
+
+    def grasp(self, grasp_width: float = 0.0, speed: float = 0.1, force: float = 10.0, blocking: bool = False):
+        try:
+            return self._gripper.grasp(width=grasp_width, speed=speed, force=force, epsilon_outer=0.04)
+        except RuntimeError:
+            return False
+
+    def stop(self):
+        self._gripper.stop()
+
+    def home(self):
+        self._gripper.homing()
+
+    def _do_grasp(self):
+        result = self.grasp(speed=0.1, force=10.0, blocking=False)
+        self._log(f"grasp result: {result}")
+
+    def _do_open(self):
+        mx = self.get_state().max_width
+        self._log(f"opening to max_width={mx}")
+        self.goto(width=mx, speed=0.1, blocking=False)
+
+
+class RobotiqGripper(BaseGripper):
+    """Robotiq 2F-85 over Modbus RTU (USB->RS485) via the pyRobotiqGripper
+    driver. Runs on the control PC alongside panda-py and is fully independent
+    of the Franka — no Panda Hand / control-box gripper server is involved, and
+    no NUC is required.
+
+    Position is in bits, ``0 = open .. 255 = closed``. :meth:`get_state` reports
+    a *synthetic* width so the policy observation computed in
+    ``NUCInterface.get_robot_state`` (``1 - width/max_width``) comes out as
+    ``pos/255`` — 0 when open, 1 when closed — matching the Panda Hand
+    convention the policy was trained against.
+    """
+
+    OPEN_BIT = 0
+    CLOSED_BIT = 255
+
+    def __init__(self, port: str = "auto", device_id: int = 9, speed: int = 255,
+                 force: int = 100, max_width_m: float = 0.085,
+                 hysteresis: float = 0.1, logging: bool = True):
+        super().__init__(hysteresis=hysteresis, logging=logging)
+        # Imported lazily so the panda-only path never needs pyRobotiqGripper.
+        from pyrobotiqgripper import RobotiqGripper as _Robotiq
+        self._log(f"Initializing RobotiqGripper via pyRobotiqGripper on port={port}")
+        self._speed = int(speed)
+        self._force = int(force)
+        self._max_width = float(max_width_m)
+        # pymodbus serial access is not concurrency-safe; the state read (camera
+        # / state thread) and the move dispatch (act_async thread) both touch the
+        # bus, so every transaction is serialized behind this lock.
+        self._lock = threading.Lock()
+        self._gripper = _Robotiq(com_port=port, device_id=int(device_id))
+        with self._lock:
+            self._gripper.connect()
+            self._gripper.activate()  # physically homes the gripper on first activation
+            self._gripper.start()
+            # Set the open/close bit references without a slow re-probe — the
+            # 2F-85 spans the full 0..255 stroke after activation.
+            self._gripper.calibrate_bit(openbit=self.OPEN_BIT, closebit=self.CLOSED_BIT)
+
+    def get_state(self):
+        with self._lock:
+            pos = self._gripper.position(refreshStatus=True)
+        if pos is None:
+            pos = self.OPEN_BIT
+        frac_closed = pos / 255.0
+        # Synthetic width: get_robot_state computes 1 - width/max_width, which
+        # must equal frac_closed -> width = max_width * (1 - frac_closed).
+        width = self._max_width * (1.0 - frac_closed)
+        return GripperState(width=width, max_width=self._max_width,
+                            is_grasped=self._target_grasp_state)
+
+    def _move(self, position: int):
+        # wait=False so the call returns as soon as the request is written and
+        # the lock is released — holding it across the ~1s travel would stall
+        # the obs read. readStatus=False keeps the locked section minimal.
+        with self._lock:
+            self._gripper.move(position, speed=self._speed, force=self._force,
+                               wait=False, readStatus=False)
+
+    def _do_grasp(self):
+        self._log(f"GRASP -> bit {self.CLOSED_BIT} (speed={self._speed}, force={self._force})")
+        self._move(self.CLOSED_BIT)
+
+    def _do_open(self):
+        self._log(f"OPEN -> bit {self.OPEN_BIT}")
+        self._move(self.OPEN_BIT)
+
+    def home(self):
+        with self._lock:
+            self._gripper.activate()
+            self._gripper.calibrate_bit(openbit=self.OPEN_BIT, closebit=self.CLOSED_BIT)
+
+    def stop(self):
+        with self._lock:
+            self._gripper.stop()
+
+
+def make_gripper(server_cfg: DictConfig, franka_ip: str, hysteresis: float,
+                 logging: bool) -> BaseGripper:
+    """Construct the gripper backend selected by ``server.gripper.type``.
+
+    Defaults to the Panda Hand when no ``gripper`` block is present so existing
+    configs keep working unchanged; set ``type: robotiq`` to drive a Robotiq
+    2F-85 over USB/RS485 instead.
+    """
+    gcfg = server_cfg.get("gripper", {}) or {}
+    gtype = str(gcfg.get("type", "panda")).lower()
+    if gtype == "panda":
+        return PandaGripper(franka_ip, hysteresis=hysteresis, logging=logging)
+    if gtype == "robotiq":
+        return RobotiqGripper(
+            port=gcfg.get("port", "auto"),
+            device_id=int(gcfg.get("device_id", 9)),
+            speed=int(gcfg.get("speed", 255)),
+            force=int(gcfg.get("force", 100)),
+            max_width_m=float(gcfg.get("max_width_m", 0.085)),
+            hysteresis=hysteresis,
+            logging=logging,
+        )
+    raise ValueError(f"Unknown gripper.type {gtype!r}; expected 'panda' or 'robotiq'.")
 
 
 class NUCInterface:
@@ -99,12 +244,17 @@ class NUCInterface:
         return self._home_pos.copy(), self._home_rot.copy()
 
     def __init__(self, ip: str, server: DictConfig, franka_ip: str,
-                 home_pos=None, home_rot=None):
+                 home_pos=None, home_rot=None, home_q=None):
         self._franka_ip = franka_ip
         self._nuc_ip = ip
         self._server_cfg = server
-        self._home_pos = np.array(home_pos)
-        self._home_rot = np.array(home_rot)
+        # Optional joint-space home. When provided it is authoritative: the arm
+        # resets to this exact joint configuration and the Cartesian home below
+        # is overridden by its FK (resolved after connecting, see _home_q).
+        self._home_q_cfg = None if home_q is None else np.asarray(home_q, dtype=np.float64).reshape(7)
+        self._uses_joint_home = self._home_q_cfg is not None
+        self._home_pos = None if home_pos is None else np.array(home_pos)
+        self._home_rot = None if home_rot is None else np.array(home_rot)
 
         print(f"Connecting to Panda at {self._franka_ip}")
         self._panda = panda_py.Panda(self._franka_ip)
@@ -115,21 +265,35 @@ class NUCInterface:
 
         hysteresis = server.gripper_hysteresis
         gripper_logging = server.get("gripper_logging", True)
-        self._gripper = GripperInterface(self._franka_ip, hysteresis=hysteresis, logging=gripper_logging)
+        self._gripper = make_gripper(server, self._franka_ip,
+                                     hysteresis=hysteresis, logging=gripper_logging)
 
         self._desired_eef_pos = self._panda.get_position()
         self._desired_eef_rot = self._panda.get_orientation(scalar_first=False)
-        # Fixed IK seed for joint-space mode: the joint configuration at the
-        # configured Cartesian home. Computed once via IK seeded with
-        # panda_py.constants.JOINT_POSITION_START (canonical high-manipulability
-        # home) so every send_control IK call lives in the same branch
-        # neighbourhood, eliminating shoulder/elbow jiggle from IK re-solving
-        # against a moving seed.
-        jps = np.asarray(panda_py.constants.JOINT_POSITION_START, dtype=np.float64)
-        self._home_q = np.asarray(
-            panda_py.ik(self._home_pos, self._home_rot, q_init=jps, q_7=float(jps[6])),
-            dtype=np.float64,
-        ).reshape(7)
+        # Resolve self._home_q, the joint configuration at home. It is the fixed
+        # IK seed for joint-space mode (so every send_control IK call lives in
+        # the same branch neighbourhood, eliminating shoulder/elbow jiggle from
+        # IK re-solving against a moving seed) and, when a joint home is
+        # configured, the reset target itself.
+        if self._uses_joint_home:
+            # Joint home is authoritative: derive the Cartesian home from FK so
+            # every consumer of self.home (freeze masking, the Cartesian
+            # impedance setpoint) matches the posture we actually drive to.
+            self._home_q = self._home_q_cfg
+            mat = np.array(panda_py.fk(self._home_q.reshape(7, 1))).reshape(4, 4)
+            self._home_pos = mat[:3, 3]
+            self._home_rot = Rotation.from_matrix(mat[:3, :3]).as_quat()  # xyzw
+            print(f"Joint-space home: q={self._home_q.tolist()} -> "
+                  f"pos={self._home_pos.tolist()} rot(xyzw)={self._home_rot.tolist()}")
+        else:
+            # Seed IK with panda_py.constants.JOINT_POSITION_START (the canonical
+            # high-manipulability home) and back out the joint config at the
+            # configured Cartesian home.
+            jps = np.asarray(panda_py.constants.JOINT_POSITION_START, dtype=np.float64)
+            self._home_q = np.asarray(
+                panda_py.ik(self._home_pos, self._home_rot, q_init=jps, q_7=float(jps[6])),
+                dtype=np.float64,
+            ).reshape(7)
 
     def get_desired_ee_pose(self):
         return np.concatenate([self._desired_eef_pos, self._desired_eef_rot]).copy()
@@ -307,8 +471,8 @@ class NUCInterface:
         self.send_qpos_control(qpos.cpu().numpy(), g)
 
     def home_gripper(self):
-        """Calibrate the gripper via homing in a background thread."""
-        threading.Thread(target=self._gripper._gripper.homing, daemon=True).start()
+        """Calibrate/home the gripper in a background thread (backend specific)."""
+        threading.Thread(target=self._gripper.home, daemon=True).start()
 
     def _parse_impedance(self):
         imp_cfg = self._server_cfg.impedance
@@ -363,14 +527,22 @@ class NUCInterface:
 
     def reset(self, open_gripper: bool = True):
         home_pos, home_rot = self.home
-        reset_pos = home_pos + np.array([0.0, 0.0, 0.04])
         # Drive to home with libfranka's motion generator before handing off to the impedance controller.
         if self._controller:
             self._panda.stop_controller()
             self._controller = None
-        self._panda.move_to_pose([reset_pos], [home_rot])
-        self.start()
-        self.send_control(home_pos, home_rot, gripper=None)
+        if self._uses_joint_home:
+            # Joint-space home: drive straight to the configured joint config,
+            # then command it (send_qpos_control FKs to the matching pose for a
+            # Cartesian controller, or passes q through for a joint-space one).
+            self._panda.move_to_joint_position(self._home_q)
+            self.start()
+            self.send_qpos_control(self._home_q, gripper=None)
+        else:
+            reset_pos = home_pos + np.array([0.0, 0.0, 0.04])
+            self._panda.move_to_pose([reset_pos], [home_rot])
+            self.start()
+            self.send_control(home_pos, home_rot, gripper=None)
 
         if open_gripper:
             self._gripper._do_open()

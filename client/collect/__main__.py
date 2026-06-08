@@ -22,7 +22,7 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 
 from client.nuc import NUCInterface
-from client.collect.realsense import RealSenseInterface
+from client.collect.cameras import CollectCameras
 from client.collect.gello import GELLOInterface
 from client.utils import get_latest_ep_path, validate_episode
 from client.collect.write import ACMEWriter
@@ -58,7 +58,8 @@ def main(cfg: DictConfig):
         try:
             ep_path = get_latest_ep_path(base_ep_path, prefix="episode")
             print(f"Recording to {ep_path}")
-            with RealSenseInterface(ep_path, **cfg.realsense) as rs_interface:
+            with CollectCameras(ep_path, realsense=cfg.realsense,
+                                zed_cameras=cfg.get("zed_cameras", [])) as rs_interface:
                 episode_writer = ACMEWriter(ep_path, serials=rs_interface.serials, **cfg.writer)
 
                 nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
@@ -167,7 +168,11 @@ def main(cfg: DictConfig):
                 state_worker_stop.set()
                 state_thread.join()
             episode_writer.flush()
-            ok, errors = validate_episode(episode_writer.episode_path)
+            ok, errors = validate_episode(
+                episode_writer.episode_path,
+                expected_n_bags=rs_interface.n_realsense,
+                expected_n_svo=rs_interface.n_zed,
+            )
             if not ok:
                 print(f"WARNING: episode {episode_writer.episode_path} failed validation:")
                 for err in errors:

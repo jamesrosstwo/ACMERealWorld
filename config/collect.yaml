@@ -13,11 +13,25 @@ nuc:
   franka_ip: "192.168.1.107"
   home_pos: ${task.home_pos}
   home_rot: ${task.home_rot}
+  home_q: ${task.home_q}
   server:
     controller: ${task.controller}
     gripper_hysteresis: ${task.gripper_hysteresis}
     gripper_logging: ${task.gripper_logging}
     impedance: ${task.impedance}
+    # Gripper backend. "robotiq" drives a Robotiq 2F-85 over USB->RS485 (Modbus
+    # RTU) on the control PC, independent of the Franka. "panda" uses the Franka
+    # Panda Hand through the control box at franka_ip. The franka_ip above is
+    # ignored by the robotiq backend.
+    gripper:
+      type: robotiq          # "robotiq" or "panda"
+      # Prefer a stable /dev/serial/by-id/... symlink so the USB->RS485 FTDI
+      # can't get swapped with the GELLO FTDI; "auto" probes for any Robotiq.
+      port: "auto"
+      device_id: 9           # Robotiq Modbus slave id (default 9)
+      speed: 255             # 0-255
+      force: 100             # 0-255 — start gentle, tune up
+      max_width_m: 0.085     # 2F-85 stroke (m), used for obs scaling
 
 realsense:
   n_frames: ${max_episode_timesteps}
@@ -25,6 +39,15 @@ realsense:
   height: 720
   fps: 15
   laser_power: 0  # IR projector power (0=off, 1-360mW). 0 recommended for FoundationStereo.
+
+# Wrist ZED(s), recorded to <serial>.svo2 alongside the RealSense .bag files and
+# decoded in postprocess (client.collect.zed.ZEDSvoProcessor). Each ZED shares
+# the RealSense width/height/fps/n_frames above. Keep `serial` and ordering in
+# sync with eval.yaml's obs_cams so capture_<serial> dirs and the rgb_<i> wrist
+# slot line up between collection and eval. Leave empty ([]) for RealSense-only.
+zed_cameras:
+  - serial: "wrist_zed"   # stable label / capture key (matches eval.yaml)
+    zed_serial: null        # ZED hardware serial (int) to pin a specific unit, or null for first available
 
 writer:
   max_episode_len: ${max_episode_timesteps}

@@ -3,6 +3,7 @@ instruction: "Pick up the green cup and place it into the sink. Control mode: jo
 
 home_pos: [0.30582778, 0., 0.48467681]
 home_rot: [1., 0., 0., 0.]
+home_q: null  # Optional 7-joint home; see config/task/default.yaml.
 
 pos_mask: [true, true, true]
 

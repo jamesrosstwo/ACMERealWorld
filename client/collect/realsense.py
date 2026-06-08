@@ -48,7 +48,11 @@ def _build_calibration(dep_profile, col_profile, ir1_profile, ir2_profile) -> di
 
 
 class RSBagProcessor:
-    def __init__(self, bag_paths: List[Path], n_frames: int, width: int, height: int, fps: int):
+    def __init__(self, bag_paths: List[Path], n_frames: int, width: int, height: int,
+                 fps: int, **_ignored):
+        # **_ignored swallows live-capture-only keys (e.g. laser_power) that ride
+        # along when gather_data passes the whole `realsense` config block; bag
+        # playback derives its dimensions from the recording.
         rs.log_to_console(min_severity=rs.log_severity.warn)
         self.bag_paths = bag_paths
         self.width = width
@@ -224,6 +228,15 @@ class RealSenseInterface:
             col_sensor.set_option(rs.option.exposure, 250)
             col_sensor.set_option(rs.option.gain, 128)
 
+            # Tier-1 timestamps: put every frame on the host-referenced global
+            # time domain (Unix-epoch ms) so RealSense bag timestamps, the live
+            # state timestamps, and the ZED wrist's IMAGE timestamps all share
+            # one clock for cross-camera sync. Enable on every sensor that
+            # supports it (the bag records whatever domain is active here).
+            for sensor in (depth_sensor, col_sensor):
+                if sensor.supports(rs.option.global_time_enabled):
+                    sensor.set_option(rs.option.global_time_enabled, 1)
+
             started.append(pipe)
 
         # Phase 2: Run on_warmup callback (e.g. gripper homing) concurrently
@@ -232,9 +245,22 @@ class RealSenseInterface:
             on_warmup()
 
         # Phase 3: Drain warmup frames so manual exposure takes effect.
-        for pipe in started:
+        for idx, pipe in enumerate(started):
+            last_fs = None
             for _ in range(15):
-                pipe.wait_for_frames(timeout_ms=5000)
+                last_fs = pipe.wait_for_frames(timeout_ms=5000)
+            # Fail loud if global time didn't take: a hardware/system-time domain
+            # would silently break cross-camera sync with the ZED (different
+            # epoch). Assert once per camera on a real frame.
+            if last_fs is not None:
+                domain = last_fs.get_frame_timestamp_domain()
+                if domain != rs.timestamp_domain.global_time:
+                    raise RuntimeError(
+                        f"Camera {self._serials[idx]} timestamps are in domain "
+                        f"{domain}, expected global_time. Cross-camera sync with "
+                        f"the ZED wrist requires the host-referenced global time "
+                        f"domain; check librealsense global_time support."
+                    )
 
         # Phase 4: Resume recording and start capture threads.
         for recorder in recorders:
