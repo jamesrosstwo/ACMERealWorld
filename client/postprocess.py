@@ -4,8 +4,10 @@ Decodes RealSense ``.bag`` files recorded during collection into synchronized
 multi-camera RGB video (MP4), IR stereo pairs (zarr), and aligned timestamps.
 Optionally runs FoundationStereo to produce depth maps from the IR pairs.
 
-When stereo depth is enabled, depth estimation runs asynchronously in background
-threads (one per GPU) so that bagfile decoding and depth inference overlap.
+When stereo depth is enabled, bag decoding runs to completion first, then depth
+estimation runs across GPU workers (one per GPU). Decoupling avoids Python GIL
+contention between the bag-decode loop and the depth threads, which otherwise
+slows decoding by ~10×.
 
 Usage::
 
@@ -49,7 +51,15 @@ def gather_data(
             if completion_marker.exists():
                 print(f"Skipping {ep_path}: already postprocessed")
             else:
-                ok, errors = validate_episode(ep_path)
+                bagpaths = sorted(Path(ep_path).glob("*.bag"))
+                bagpaths = [p for p in bagpaths if not p.stem.endswith(".orig")]
+                svopaths = sorted(Path(ep_path).glob("*.svo2"))
+                # Validate against the cameras actually present (RealSense bags +
+                # ZED svo2) rather than a fixed count, so mixed RealSense/ZED
+                # episodes pass; this still requires raw_episode.zarr.
+                ok, errors = validate_episode(
+                    ep_path, expected_n_bags=len(bagpaths), expected_n_svo=len(svopaths)
+                )
                 if not ok:
                     print(f"Skipping {ep_path}: failed validation: {'; '.join(errors)}")
                     continue
@@ -58,19 +68,32 @@ def gather_data(
                     shutil.rmtree(Path(ep_path / "captures"))
                 except FileNotFoundError:
                     pass
-                bagpaths = sorted(Path(ep_path).glob("*.bag"))
-                bagpaths = [p for p in bagpaths if not p.stem.endswith(".orig")]
-                serials = [p.stem for p in bagpaths]
+                serials = [p.stem for p in bagpaths] + [p.stem for p in svopaths]
                 writer = ACMEWriter(ep_path, serials=serials, **writer_cfg)
+                print(f"found {len(bagpaths)} bags + {len(svopaths)} svo: {serials}")
+
                 rs_interface = RSBagProcessor(bagpaths, **realsense)
-                print(f"found {len(bagpaths)} bags: {serials}")
                 for color, color_tmstmp, ir_left, ir_right, serial in tqdm(rs_interface.process_all_frames()):
                     try:
                         writer.write_capture_frame(serial, color_tmstmp, color, ir_left, ir_right)
                     except IndexError:
                         continue
+
+                # ZED wrist captures decode the same way; imported lazily so
+                # RealSense-only episodes don't need pyzed/the ZED SDK.
+                if svopaths:
+                    from client.collect.zed import ZEDSvoProcessor
+                    zed_interface = ZEDSvoProcessor(svopaths)
+                    for color, color_tmstmp, ir_left, ir_right, serial in tqdm(zed_interface.process_all_frames()):
+                        try:
+                            writer.write_capture_frame(serial, color_tmstmp, color, ir_left, ir_right)
+                        except IndexError:
+                            continue
+
                 writer.flush()
                 completion_marker.touch()
+                for raw in bagpaths + svopaths:
+                    raw.unlink()
 
             if on_episode_done is not None:
                 on_episode_done(ep_path)
@@ -104,6 +127,12 @@ def _depth_worker(gpu_id: int, work_queue: queue.Queue, stereo_cfg: DictConfig):
                            spatial_iters=stereo_cfg.get("spatial_iters", 2),
                            hole_fill_mode=stereo_cfg.get("hole_fill_mode", "farthest"),
                            hole_fill_max_radius=stereo_cfg.get("hole_fill_max_radius", 2))
+            if (ep_path / "DEPTH_COMPLETE").exists():
+                for cap_dir in (ep_path / "captures").iterdir():
+                    for side in ("ir_left.zarr", "ir_right.zarr"):
+                        ir_path = cap_dir / side
+                        if ir_path.is_dir():
+                            shutil.rmtree(ir_path)
         except Exception:
             log.exception("Depth processing failed for %s on GPU %d", ep_path, gpu_id)
         finally:
@@ -116,14 +145,25 @@ def main(cfg: DictConfig):
     cfg = OmegaConf.create(cfg)
 
     stereo_enabled = cfg.get("stereo", {}).get("enabled", False)
-    depth_queue: Optional[queue.Queue] = None
-    workers: list[threading.Thread] = []
+    pending_depth: list[Path] = []
 
-    if stereo_enabled:
+    gather_data(
+        cfg.episodes_path,
+        cfg.max_episode_timesteps,
+        cfg.writer,
+        cfg.realsense,
+        on_episode_done=pending_depth.append if stereo_enabled else None,
+    )
+
+    if stereo_enabled and pending_depth:
         import torch
 
         num_gpus = torch.cuda.device_count()
-        depth_queue = queue.Queue()
+        depth_queue: queue.Queue = queue.Queue()
+        for ep_path in pending_depth:
+            depth_queue.put(ep_path)
+
+        workers: list[threading.Thread] = []
         for gpu_id in range(num_gpus):
             t = threading.Thread(
                 target=_depth_worker,
@@ -132,18 +172,9 @@ def main(cfg: DictConfig):
             )
             t.start()
             workers.append(t)
-        log.info("Started %d depth worker(s) across %d GPU(s)", num_gpus, num_gpus)
+        log.info("Started %d depth worker(s) across %d GPU(s) for %d episode(s)",
+                 num_gpus, num_gpus, len(pending_depth))
 
-    gather_data(
-        cfg.episodes_path,
-        cfg.max_episode_timesteps,
-        cfg.writer,
-        cfg.realsense,
-        on_episode_done=depth_queue.put if depth_queue else None,
-    )
-
-    if stereo_enabled:
-        print("Waiting for background depth processing to finish...")
         depth_queue.join()
         for _ in workers:
             depth_queue.put(None)
