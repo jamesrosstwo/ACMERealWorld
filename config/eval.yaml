@@ -100,7 +100,7 @@ cameras:
 # Camera order in `cameras.obs_cams` must stay [external, wrist] to match the
 # profile's camera_names — entry 0 is logged as "external", entry 1 as "wrist".
 oopsie:
-  enabled: false
+  enabled: true
   robot_profile: oopsie-tools/configs/robot_profiles/acme_franka.yaml
   data_root_dir: ../outputs/oopsie
   operator_name: ""
