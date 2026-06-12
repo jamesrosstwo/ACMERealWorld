@@ -30,6 +30,15 @@ from client.eval.policy import EvalPolicyInterface
 from client.eval.live_plotter import LiveControlErrorPlotter
 from client.nuc import NUCInterface
 
+# OopsieData failure-mode logging. Imports are deferred so the module can be
+# used without oopsie-tools installed when cfg.oopsie.enabled is false.
+try:
+    from oopsie_tools.annotation_tool.episode_recorder import EpisodeRecorder
+    from oopsie_tools.utils.robot_profile import load_robot_profile
+    _OOPSIE_AVAILABLE = True
+except ImportError:
+    _OOPSIE_AVAILABLE = False
+
 
 class AggressiveMotionError(RuntimeError):
     """Raised when a policy-issued horizon would exceed configured velocity limits."""
@@ -257,7 +266,7 @@ def start_control_loop(
     return stop_loop, stop_event, safety_state
 
 
-def record_episode(cfg, ep_path, nuc, policy):
+def record_episode(cfg, ep_path, nuc, policy, oopsie_recorder=None):
     writer = None
     safety_state = {"violation": None}
     try:
@@ -270,18 +279,48 @@ def record_episode(cfg, ep_path, nuc, policy):
                 plotter = None
             nuc.reset(open_gripper=cfg.task.open_gripper_on_reset)
 
+            if oopsie_recorder is not None:
+                oopsie_recorder.reset_episode_recorder()
+
             if bool(cfg.get("render_eval", False)):
                 writer.register_cameras(rsi.serials, fps=cfg.cameras.fps)
+
+            # The oopsie EpisodeRecorder profile (acme_franka.yaml) names cameras
+            # "external" and "wrist", in the same positional order as
+            # cfg.cameras.obs_cams (high-left external, wrist ZED).
+            oopsie_cam_names = ["external", "wrist"]
 
             primary_serial = rsi.serials[0]
             def on_receive_frame(serial, frame):
                 writer.on_frame(serial, frame)
                 if serial == primary_serial:
                     c_state = nuc.get_robot_state()
-                    c_state.update(dict(
-                        action=nuc.get_desired_ee_pose()
-                    ))
+                    desired_pose = nuc.get_desired_ee_pose()
+                    c_state.update(dict(action=desired_pose))
                     writer.on_state_update(c_state)
+                    if oopsie_recorder is not None:
+                        frames = rsi.get_rgb_obs()
+                        image_obs = {}
+                        for cam_name, cam_frame in zip(oopsie_cam_names, frames):
+                            arr = cam_frame.numpy() if hasattr(cam_frame, "numpy") else np.asarray(cam_frame)
+                            image_obs[cam_name] = arr.astype(np.uint8)
+                        cartesian_position = np.concatenate(
+                            [c_state["ee_pos"], c_state["ee_rot"]]
+                        )
+                        oopsie_recorder.record_step(
+                            observation={
+                                "image_observation": image_obs,
+                                "robot_state": {
+                                    "joint_position": np.asarray(c_state["qpos"]),
+                                    "cartesian_position": cartesian_position,
+                                    "gripper_position": np.asarray(c_state["gripper_force"]),
+                                },
+                            },
+                            action={
+                                "cartesian_position": desired_pose,
+                                "gripper_position": np.asarray(c_state["gripper_force"]),
+                            },
+                        )
 
             rsi.start_capture(on_receive_frame)#, on_warmup=nuc.home_gripper)
             print("Waiting for realsense caches to fill")
@@ -345,6 +384,21 @@ def main(cfg: DictConfig):
     nuc = NUCInterface(**cfg.nuc)
     policy = EvalPolicyInterface(**cfg.policy)
 
+    oopsie_recorder = None
+    oopsie_cfg = cfg.get("oopsie", None)
+    if oopsie_cfg is not None and oopsie_cfg.get("enabled", False):
+        if not _OOPSIE_AVAILABLE:
+            raise ImportError(
+                "cfg.oopsie.enabled=true but oopsie_tools is not importable. "
+                "Install via `pip install -e oopsie-tools` in the active env."
+            )
+        profile = load_robot_profile(oopsie_cfg.robot_profile)
+        oopsie_recorder = EpisodeRecorder(
+            robot_profile=profile,
+            data_root_dir=oopsie_cfg.data_root_dir,
+            operator_name=oopsie_cfg.operator_name or None,
+        )
+
     ep_idx = cfg.start_index
 
     timestamp = int(time.time())
@@ -364,7 +418,9 @@ def main(cfg: DictConfig):
         try:
             ep_path = out_path / f"episode_{ep_idx:03d}"
             ep_path.mkdir()
-            record_episode(cfg, ep_path, nuc, policy)
+            record_episode(cfg, ep_path, nuc, policy, oopsie_recorder=oopsie_recorder)
+            if oopsie_recorder is not None:
+                oopsie_recorder.finish_rollout(instruction=cfg.task.instruction)
             ep_idx += 1
         except AggressiveMotionError as e:
             print(f"\nSAFETY ABORT: {e}")
