@@ -409,7 +409,10 @@ def main(cfg: DictConfig):
         oopsie_recorder = EpisodeRecorder(
             robot_profile=profile,
             data_root_dir=oopsie_cfg.data_root_dir,
-            operator_name=oopsie_cfg.operator_name or None,
+            # Must be a string, never None: the recorder writes operator_name
+            # straight into an h5 attr and h5py rejects None ("Object dtype
+            # has no native HDF5 equivalent"). Empty string is fine.
+            operator_name=oopsie_cfg.get("operator_name") or "",
         )
 
     ep_idx = cfg.start_index
