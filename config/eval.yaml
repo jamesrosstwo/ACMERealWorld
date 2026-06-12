@@ -6,7 +6,7 @@ policy:
   prompt: ${task.instruction}
   action_type: ${task.action_type}
 
-max_episode_timesteps: 4000
+max_episode_timesteps: 1500
 start_index: 0
 
 # Print each commanded action horizon (pre-safety) to stdout. Useful for
@@ -88,9 +88,9 @@ cameras:
   obs_cams:
     # - "102122061570" # aug right
     # - "148122060186" # high rights
-    # - "932122060415" # high left
+    - "932122060415" # high left
     # - "848312071702" # overhead
-    - "051222062898" # aug left
+    # - "051222062898" # aug left
     - serial: "wrist_zed"   # wrist cam — ZED Mini (droid-style), left view
       backend: zed
       zed_serial: null       # set to the ZED hardware serial (int) if needed
