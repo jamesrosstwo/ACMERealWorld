@@ -286,24 +286,37 @@ def record_episode(cfg, ep_path, nuc, policy, oopsie_recorder=None):
                 writer.register_cameras(rsi.serials, fps=cfg.cameras.fps)
 
             # The oopsie EpisodeRecorder profile (acme_franka.yaml) names cameras
-            # "external" and "wrist", in the same positional order as
-            # cfg.cameras.obs_cams (high-left external, wrist ZED).
-            oopsie_cam_names = ["external", "wrist"]
+            # "external" and "wrist", positionally matching cfg.cameras.obs_cams
+            # (rsi.serials[0] -> external, rsi.serials[1] -> wrist).
+            oopsie_serial_to_cam = dict(zip(rsi.serials, ["external", "wrist"]))
+            # Latest single frame per serial. on_receive_frame delivers one current
+            # BGR frame (H,W,3) per camera; we stash the newest from each so the
+            # primary tick can assemble a synchronized multi-cam observation. This
+            # deliberately avoids rsi.get_rgb_obs(), whose per-backend obs-history
+            # caches are empty during warmup (ZED stack would raise) and return a
+            # whole history stack, not a single frame.
+            oopsie_latest_frames = {}
 
             primary_serial = rsi.serials[0]
             def on_receive_frame(serial, frame):
                 writer.on_frame(serial, frame)
+                if oopsie_recorder is not None:
+                    oopsie_latest_frames[serial] = frame
                 if serial == primary_serial:
                     c_state = nuc.get_robot_state()
                     desired_pose = nuc.get_desired_ee_pose()
                     c_state.update(dict(action=desired_pose))
                     writer.on_state_update(c_state)
-                    if oopsie_recorder is not None:
-                        frames = rsi.get_rgb_obs()
+                    if oopsie_recorder is not None and all(
+                        s in oopsie_latest_frames for s in oopsie_serial_to_cam
+                    ):
                         image_obs = {}
-                        for cam_name, cam_frame in zip(oopsie_cam_names, frames):
-                            arr = cam_frame.numpy() if hasattr(cam_frame, "numpy") else np.asarray(cam_frame)
-                            image_obs[cam_name] = arr.astype(np.uint8)
+                        for s, cam_name in oopsie_serial_to_cam.items():
+                            raw = oopsie_latest_frames[s]
+                            arr = raw.numpy() if hasattr(raw, "numpy") else np.asarray(raw)
+                            # Cameras emit BGR (rs.format.bgr8 / ZED BGRA->BGR); the
+                            # recorder writes RGB mp4s, so flip channels to RGB.
+                            image_obs[cam_name] = np.ascontiguousarray(arr[..., ::-1]).astype(np.uint8)
                         cartesian_position = np.concatenate(
                             [c_state["ee_pos"], c_state["ee_rot"]]
                         )
