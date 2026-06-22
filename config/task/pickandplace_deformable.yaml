@@ -1,9 +1,15 @@
 # @package _group_
-instruction: "Pick up the stuffed animal and place it in the box. Control mode: joint velocity."
+instruction: "Pick up the stuffed animal and place it in the cardboard box."
+# instruction: "Pick up the stuffed animal and place it in the box. Control mode: joint velocity."
 
 home_pos: [0.30582778, 0., 0.48467681]
 home_rot: [1., 0., 0., 0.]
 home_q: [0.002532, -0.542530, -0.002353, -2.448671, -0.000952, 1.903067, 0.010804]
+
+# Randomize the start posture: per-reset Gaussian noise (radians) added to each
+# joint of home_q. Flip enabled to true to use it; tune per-joint stddevs here.
+home_q_noise_enabled: true
+home_q_noise_std: [0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02]
 
 pos_mask: [true, true, true]
 
@@ -17,10 +23,10 @@ gripper_logging: false
 controller: joint_impedance
 action_type: qpos
 
-# controller: cartesian
+# controller: cartesiand place it in the box. Control mode: joint velocity."
 # action_type: cartesian
 
-max_episode_timesteps: 300
+max_episode_timesteps: 225
 
 impedance:
   # Original panda_py CartesianImpedance defaults, converted to explici0t gains.

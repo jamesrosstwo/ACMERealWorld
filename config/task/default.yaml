@@ -13,6 +13,14 @@ home_rot: [1., 0., 0., 0.]
 # use the Cartesian home_pos/home_rot directly.
 home_q: null
 
+# Domain randomization for the joint-space home. When home_q_noise_enabled is
+# true (and home_q is set), the arm resets to home_q plus fresh per-joint
+# Gaussian noise each episode, so every rollout starts from a slightly
+# different posture. home_q_noise_std is a scalar (same stddev for every joint)
+# or a list of 7 per-joint stddevs, in radians. Has no effect when home_q null.
+home_q_noise_enabled: false
+home_q_noise_std: 0.0
+
 pos_mask: [true, true, true]
 
 freeze_rotation: false

@@ -14,6 +14,9 @@ nuc:
   home_pos: ${task.home_pos}
   home_rot: ${task.home_rot}
   home_q: ${task.home_q}
+  # Per-reset Gaussian noise on the joint-space home (see config/task/default.yaml).
+  home_q_noise_enabled: ${oc.select:task.home_q_noise_enabled,false}
+  home_q_noise_std: ${oc.select:task.home_q_noise_std,0.0}
   server:
     controller: ${task.controller}
     gripper_hysteresis: ${task.gripper_hysteresis}

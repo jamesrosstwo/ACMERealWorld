@@ -244,7 +244,8 @@ class NUCInterface:
         return self._home_pos.copy(), self._home_rot.copy()
 
     def __init__(self, ip: str, server: DictConfig, franka_ip: str,
-                 home_pos=None, home_rot=None, home_q=None):
+                 home_pos=None, home_rot=None, home_q=None,
+                 home_q_noise_enabled=False, home_q_noise_std=0.0):
         self._franka_ip = franka_ip
         self._nuc_ip = ip
         self._server_cfg = server
@@ -253,6 +254,16 @@ class NUCInterface:
         # is overridden by its FK (resolved after connecting, see _home_q).
         self._home_q_cfg = None if home_q is None else np.asarray(home_q, dtype=np.float64).reshape(7)
         self._uses_joint_home = self._home_q_cfg is not None
+        # Optional domain randomization: add fresh per-joint Gaussian noise to
+        # the joint home on every reset (see _sample_initial_q). Only meaningful
+        # with a joint-space home. The std is a scalar (broadcast to all 7
+        # joints) or a length-7 list of per-joint stddevs, in radians.
+        self._home_q_noise_enabled = bool(home_q_noise_enabled)
+        self._home_q_noise_std = np.broadcast_to(
+            np.asarray(home_q_noise_std, dtype=np.float64), (7,)).copy()
+        if self._home_q_noise_enabled and not self._uses_joint_home:
+            print("WARNING: home_q_noise_enabled is set but no home_q is "
+                  "configured; initial-pose noise will not be applied.")
         self._home_pos = None if home_pos is None else np.array(home_pos)
         self._home_rot = None if home_rot is None else np.array(home_rot)
 
@@ -525,6 +536,22 @@ class NUCInterface:
                 nullspace_damping=ns_damping,
             )
 
+    def _sample_initial_q(self):
+        """Joint configuration to reset to, optionally perturbed by noise.
+
+        When home-q noise is enabled, draw fresh per-joint Gaussian noise and
+        add it to the nominal joint home so each reset starts from a slightly
+        different posture (domain randomization). self._home_q is left untouched
+        — it stays the canonical IK seed and impedance reference.
+        """
+        if not self._home_q_noise_enabled:
+            return self._home_q.copy()
+        noise = np.random.normal(0.0, self._home_q_noise_std)
+        noisy_q = self._home_q + noise
+        print(f"Home-q noise (std={self._home_q_noise_std.tolist()}): "
+              f"q={noisy_q.tolist()}")
+        return noisy_q
+
     def reset(self, open_gripper: bool = True):
         home_pos, home_rot = self.home
         # Drive to home with libfranka's motion generator before handing off to the impedance controller.
@@ -535,9 +562,10 @@ class NUCInterface:
             # Joint-space home: drive straight to the configured joint config,
             # then command it (send_qpos_control FKs to the matching pose for a
             # Cartesian controller, or passes q through for a joint-space one).
-            self._panda.move_to_joint_position(self._home_q)
+            initial_q = self._sample_initial_q()
+            self._panda.move_to_joint_position(initial_q)
             self.start()
-            self.send_qpos_control(self._home_q, gripper=None)
+            self.send_qpos_control(initial_q, gripper=None)
         else:
             reset_pos = home_pos + np.array([0.0, 0.0, 0.04])
             self._panda.move_to_pose([reset_pos], [home_rot])
