@@ -135,8 +135,7 @@ def start_control_loop(
         eef_pos = eef_pos[:, pos_mask]
 
         desired_eef_pos, desired_eef_quat, desired_gripper_force, desired_qpos = policy(
-            rgb_0=resized_frames[0].unsqueeze(0),
-            rgb_1=resized_frames[1].unsqueeze(0),
+            rgbs=[f.unsqueeze(0) for f in resized_frames],
             eef_pos=np.expand_dims(eef_pos, 0),
             eef_quat=np.expand_dims(eef_rot, 0),
             gripper_force=np.expand_dims(gripper_force, 0),
@@ -285,10 +284,19 @@ def record_episode(cfg, ep_path, nuc, policy, oopsie_recorder=None):
             if bool(cfg.get("render_eval", False)):
                 writer.register_cameras(rsi.serials, fps=cfg.cameras.fps)
 
-            # The oopsie EpisodeRecorder profile (acme_franka.yaml) names cameras
-            # "external" and "wrist", positionally matching cfg.cameras.obs_cams
-            # (rsi.serials[0] -> external, rsi.serials[1] -> wrist).
-            oopsie_serial_to_cam = dict(zip(rsi.serials, ["external", "wrist"]))
+            # The oopsie EpisodeRecorder profile (acme_franka.yaml) logs two
+            # cameras, "external" and "wrist". Select them out of obs_cams by
+            # server key; any other obs cam (e.g. exterior_image_2_left) is not
+            # logged to oopsie.
+            _OOPSIE_CAM_BY_KEY = {
+                "exterior_image_1_left": "external",
+                "wrist_image_left": "wrist",
+            }
+            oopsie_serial_to_cam = {
+                serial: _OOPSIE_CAM_BY_KEY[key]
+                for key, serial in zip(rsi.rgb_keys, rsi.serials)
+                if key in _OOPSIE_CAM_BY_KEY
+            }
             # Latest single frame per serial. on_receive_frame delivers one current
             # BGR frame (H,W,3) per camera; we stash the newest from each so the
             # primary tick can assemble a synchronized multi-cam observation. This
@@ -395,7 +403,13 @@ def record_episode(cfg, ep_path, nuc, policy, oopsie_recorder=None):
 def main(cfg: DictConfig):
     cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
     nuc = NUCInterface(**cfg.nuc)
-    policy = EvalPolicyInterface(**cfg.policy)
+    # rgb_keys (the per-camera server keys) are owned by cameras.obs_cams so the
+    # cam -> server-key mapping lives in one place. Inject them into the policy,
+    # ignoring any stale rgb_keys left in the policy config.
+    policy_cfg = OmegaConf.to_container(cfg.policy, resolve=True)
+    policy_cfg.pop("rgb_keys", None)
+    cam_keys = [str(k) for k in cfg.cameras.obs_cams.keys()]
+    policy = EvalPolicyInterface(rgb_keys=cam_keys, **policy_cfg)
 
     oopsie_recorder = None
     oopsie_cfg = cfg.get("oopsie", None)

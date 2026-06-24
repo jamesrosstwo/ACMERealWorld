@@ -1,5 +1,5 @@
 defaults:
-  - policy: tisl
+  - policy: borabora
   - task: rope
 
 policy:
@@ -83,29 +83,34 @@ cameras:
   # IR projector pattern bleeds into the color stream, so a mismatch here
   # introduces a training/eval visual shift.
   laser_power: 0
-  # Order here is positional: entry 0 -> rgb_0 / output_video_0, entry 1 ->
-  # rgb_1 / output_video_1, etc. A bare string is a RealSense serial; a mapping
-  # selects the backend explicitly. `serial` is just a stable label/key for a
-  # ZED (not its hardware serial) — set `zed_serial` to pin a specific ZED when
-  # more than one is connected.
+  # Maps each policy-server rgb key -> the physical camera that fills it. The KEY
+  # is sent to the server verbatim (as the multipart file field and in the
+  # rgb_keys form value) and is what the policy's rgb_keys is derived from, so it
+  # must be the server's canonical DROID key WITHOUT the `observation/` prefix
+  # (exterior_image_1_left, exterior_image_2_left, wrist_image_left). The server
+  # re-namespaces them internally; see `GET /conventions` (input.rgb_keys) for
+  # the authoritative list. This is the single source of truth for the
+  # cam->server mapping — there is no positional rgb_0/rgb_1 remap anymore.
+  #
+  # The VALUE is the camera: a bare string is a RealSense hardware serial; a
+  # mapping selects another backend. For a ZED, `serial` is just a stable label
+  # (not its hw serial) and `zed_serial` pins a device when more than one is
+  # connected. Order is preserved and also drives writer/render output indices.
   obs_cams:
-    # - "102122061570" # aug right
-    - "148122060186" # high rights
-    # - "848312071702" # overhead RealSense — replaced by static ZED 2i below
-    # - "051222062898" # aug left
-    # - serial: "static_zed"  # external/static view — ZED 2i, left view
-    #   backend: zed
-    #   zed_serial: 39327923   # ZED 2i hardware serial
-    - serial: "wrist_zed"   # wrist cam — ZED Mini (droid-style), left view
+    exterior_image_1_left: "148122060186"   # high right (RealSense)
+    exterior_image_2_left: "932122060415"   # high left  (RealSense)
+    wrist_image_left:                        # wrist — ZED Mini (droid-style)
+      serial: "wrist_zed"
       backend: zed
-      zed_serial: 17785901   # ZED Mini serial — pinned (two ZEDs now connected)
-    - "932122060415" # high left
+      zed_serial: 17785901   # ZED Mini hw serial — pinned (two ZEDs connected)
     
 
 # OopsieData failure-mode logging. Disabled by default; enable once
 # oopsie-tools/configs/contributor_config.yaml has a real lab_id (UofT_RVL).
-# Camera order in `cameras.obs_cams` must stay [external, wrist] to match the
-# profile's camera_names — entry 0 is logged as "external", entry 1 as "wrist".
+# The oopsie profile (acme_franka.yaml) logs two cameras, "external" and
+# "wrist". They are selected from cameras.obs_cams by server key:
+# exterior_image_1_left -> "external", wrist_image_left -> "wrist"
+# (see client/eval/__main__.py). exterior_image_2_left is not logged.
 oopsie:
   enabled: true
   robot_profile: oopsie-tools/configs/robot_profiles/acme_franka.yaml

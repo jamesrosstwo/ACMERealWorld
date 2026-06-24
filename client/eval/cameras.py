@@ -12,10 +12,16 @@ cameras elsewhere: all RealSense cameras are grouped into a single
 :class:`~client.eval.zed.EvalZed`, and this manager re-interleaves their
 observations back into the global ``obs_cams`` order.
 
-``obs_cams`` entries may be either:
+``obs_cams`` is a mapping of *server observation key* -> camera spec, e.g.
+``{"observation/wrist_image_left": {serial: wrist_zed, backend: zed, ...}}``.
+The key is the rgb key sent to the policy server (and what ``rgb_keys`` is
+derived from); the spec selects the physical camera. Each spec may be either:
 
 * a bare serial string (treated as RealSense, backwards compatible); or
 * a mapping ``{serial: <str>, backend: realsense|zed, zed_serial: <int?>}``.
+
+A plain list of specs is still accepted for backwards compatibility, in which
+case the keys default to ``rgb_0``, ``rgb_1``, ...
 """
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -37,18 +43,28 @@ def _parse_cam(cam) -> Tuple[str, str, Optional[int]]:
 
 class EvalCameras:
     def __init__(self, n_frames: int, width: int, height: int, fps: int,
-                 obs_history: int, obs_cams: List, laser_power: int = 0):
+                 obs_history: int, obs_cams, laser_power: int = 0):
         self._fps = fps
         self._backends: List = []
         self._serials: List[str] = []
+
+        # obs_cams maps a server rgb key -> camera spec. A plain list is still
+        # accepted (keys default to rgb_0, rgb_1, ...). Order is preserved: it
+        # drives get_rgb_obs() ordering and the rgb_keys sent to the server.
+        if hasattr(obs_cams, "keys"):
+            entries = [(str(k), v) for k, v in obs_cams.items()]
+        else:
+            entries = [(f"rgb_{i}", v) for i, v in enumerate(obs_cams)]
+        self._rgb_keys: List[str] = [k for k, _ in entries]
+
         # global obs index -> (backend_position, local_index_within_backend)
-        self._routing: List[Optional[Tuple[int, int]]] = [None] * len(obs_cams)
+        self._routing: List[Optional[Tuple[int, int]]] = [None] * len(entries)
 
         rs_serials: List[str] = []
         rs_global_indices: List[int] = []
         zed_entries: List[Tuple[int, EvalZed]] = []
 
-        for global_idx, cam in enumerate(obs_cams):
+        for global_idx, (_key, cam) in enumerate(entries):
             backend, serial, device_serial = _parse_cam(cam)
             self._serials.append(serial)
             if backend == "realsense":
@@ -84,6 +100,11 @@ class EvalCameras:
     @property
     def serials(self) -> List[str]:
         return list(self._serials)
+
+    @property
+    def rgb_keys(self) -> List[str]:
+        """Server observation keys, in obs order (aligns with get_rgb_obs())."""
+        return list(self._rgb_keys)
 
     def start_capture(self, on_receive_frame: Callable = None, on_warmup: Callable = None):
         # Only the first backend runs the warmup hook (e.g. gripper homing) so

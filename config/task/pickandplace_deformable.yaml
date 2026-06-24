@@ -1,6 +1,6 @@
 # @package _group_
-instruction: "Pick up the stuffed animal and place it in the cardboard box."
-# instruction: "Pick up the stuffed animal and place it in the box. Control mode: joint velocity."
+# instruction: "Pick up the stuffed animal and place it in the cardboard box."
+instruction: "Pick up the stuffed animal and place it in the box. Control mode: joint velocity."
 
 home_pos: [0.30582778, 0., 0.48467681]
 home_rot: [1., 0., 0., 0.]

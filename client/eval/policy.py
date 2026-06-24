@@ -164,7 +164,8 @@ class EvalPolicyInterface:
             for t in range(batch.shape[0]):
                 rgb = batch[t].transpose(1, 2, 0)  # CHW -> HWC, RGB
                 bgr = rgb[..., ::-1]               # RGB -> BGR for cv2
-                fname = self._dump_frames_dir / f"{self._dump_idx:05d}_{rgb_key}_t{t}.png"
+                safe_key = rgb_key.replace("/", "_")
+                fname = self._dump_frames_dir / f"{self._dump_idx:05d}_{safe_key}_t{t}.png"
                 cv2.imwrite(str(fname), bgr)
         self._dump_idx += 1
 
@@ -182,8 +183,7 @@ class EvalPolicyInterface:
         return torch.from_numpy(eef_pos), torch.from_numpy(eef_rot)
 
     def __call__(self,
-                 rgb_0: torch.Tensor,
-                 rgb_1: torch.Tensor,
+                 rgbs: List[torch.Tensor],
                  eef_pos: np.ndarray,
                  eef_quat: np.ndarray,
                  gripper_force: np.ndarray,
@@ -191,16 +191,27 @@ class EvalPolicyInterface:
         """
         Send binary data using multipart/form-data for efficient transfer.
 
+        ``rgbs`` is one frame tensor per camera, positionally matching
+        ``self._rgb_keys`` (entry 0 -> rgb_0, entry 1 -> rgb_1, ...). The count
+        must equal ``len(self._rgb_keys)`` so we never silently drop a camera
+        the server expects.
+
         Returns (desired_eef_pos, desired_eef_rot, desired_gripper_force, desired_qpos)
         regardless of action_type — the qpos vs cartesian wire format only
         determines how the 8-dim action returned by the server is parsed; both
         downstream consumers (writer, settle, dispatch) get the same shape.
         """
+        if len(rgbs) != len(self._rgb_keys):
+            raise ValueError(
+                f"got {len(rgbs)} camera frames but rgb_keys has "
+                f"{len(self._rgb_keys)} entries ({self._rgb_keys}); "
+                "obs_cams and rgb_keys must line up positionally"
+            )
         data = {}
 
         files = dict()
-        # Add RGB frames as binary data
-        rgb_data = {"rgb_0": rgb_0, "rgb_1": rgb_1}
+        # Add RGB frames as binary data, keyed positionally by rgb_keys.
+        rgb_data = dict(zip(self._rgb_keys, rgbs))
 
         if self._dump_frames_dir is not None:
             self._dump_sent_frames(rgb_data)
@@ -231,7 +242,7 @@ class EvalPolicyInterface:
             "application/octet-stream"
         )
 
-        obs_steps = rgb_0.shape[1]
+        obs_steps = rgbs[0].shape[1]
         data.update({
             "rgb_keys": ",".join(self._rgb_keys),
             "lowdim_keys": ",".join(self._lowdim_keys),
@@ -247,7 +258,17 @@ class EvalPolicyInterface:
                 data=data,
                 timeout=30
             )
-            resp.raise_for_status()
+            if not resp.ok:
+                # Surface what we sent + the server's own explanation. Without
+                # this, raise_for_status() only reports the status code and hides
+                # the response body where the server says why it rejected us.
+                raise RuntimeError(
+                    f"policy server returned {resp.status_code} from /predict.\n"
+                    f"  sent file fields: {list(files.keys())}\n"
+                    f"  sent rgb_keys:    {data['rgb_keys']!r}\n"
+                    f"  sent lowdim_keys: {data['lowdim_keys']!r}\n"
+                    f"  server response:  {resp.text[:2000]}"
+                )
             result = resp.json()
             action = torch.tensor(result["action"])
             if self._delta_actions:
